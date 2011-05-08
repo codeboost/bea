@@ -1,0 +1,1 @@
+exports.inspect = (what) ->	console.debug what
