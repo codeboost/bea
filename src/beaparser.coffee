@@ -1,4 +1,4 @@
-_ = require './lib/underscore'
+_ = require 'underscore'
 class BeaNode
 	constructor: (@text, @level, @fileName = "", @line = 0)->
 		@children = []
@@ -15,7 +15,7 @@ class BeaNode
 	
 	#returns the 'type' of the node. Basically the first word of the line or 'comment'
 	type: ->
-		if @text.match(/^\/\//) then return "comment"		
+		if /^\/\/|^\#/.test @text then return '@comment'
 		tmp = @text.split(' ')
 		return tmp[0]
 		
@@ -30,13 +30,13 @@ class BeaNode
 		
 	#return list of children which match re
 	matchChildren: (re) ->
-		_.select @children, (node) -> node.text.match(re)?
+		_.select @children, (node) -> re.test node.text
 	
 	
 			
 class BeaParser 
 	#preserveWhitespace means preserve starting whitespace. Trailing whitespace is removed
-	constructor: (@fileName = "", @preserveWhitespace = false) ->
+	constructor: (@fileName = "", @preserveWhitespace = false, @preserveComments = false) ->
 		@root = new BeaNode "", 0, @fileName, 0
 		@curNode = @root
 		
@@ -48,19 +48,24 @@ class BeaParser
 		
 		rawTxt = txt.replace(/^\s+|\s+$/g, '')
 		
+		return null unless rawTxt.length
 		
-		return null unless rawTxt.length > 0
-		#internal comments can start with #
-		return null if rawTxt[0] == '#'
-		
-		#escaped hash must be added as node: \#
-		if rawTxt.length > 2 && rawTxt[0] == '\\' && rawTxt[1] == '#'
-			rawTxt = rawTxt.slice(1)
-		
+		if !@preserveComments 
+			#internal comments can start with #
+			#escaped hash must be added as node: \#
+			
+			return null if rawTxt[0] == '#'			
+			
+			#in-string comments 
+			rawTxt = rawTxt.replace /[^\\]\#.*/, ''
+			rawTxt = rawTxt.replace /\\#/g, '#'
+				
 		if !@preserveWhitespace 
 			txt = rawTxt
 		else
 			txt = txt.replace(/\s+$/g, '') #trailing whitespace
+			
+		return null unless txt.length
 		
 		node = new BeaNode txt, level, @fileName, linenumber + 1
 		

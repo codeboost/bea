@@ -1,6 +1,6 @@
 (function() {
   var BeaNode, BeaParser, _;
-  _ = require('./lib/underscore');
+  _ = require('underscore');
   BeaNode = (function() {
     function BeaNode(text, level, fileName, line) {
       this.text = text;
@@ -22,8 +22,8 @@
     };
     BeaNode.prototype.type = function() {
       var tmp;
-      if (this.text.match(/^\/\//)) {
-        return "comment";
+      if (/^\/\/|^\#/.test(this.text)) {
+        return '@comment';
       }
       tmp = this.text.split(' ');
       return tmp[0];
@@ -46,15 +46,16 @@
     };
     BeaNode.prototype.matchChildren = function(re) {
       return _.select(this.children, function(node) {
-        return node.text.match(re) != null;
+        return re.test(node.text);
       });
     };
     return BeaNode;
   })();
   BeaParser = (function() {
-    function BeaParser(fileName, preserveWhitespace) {
+    function BeaParser(fileName, preserveWhitespace, preserveComments) {
       this.fileName = fileName != null ? fileName : "";
       this.preserveWhitespace = preserveWhitespace != null ? preserveWhitespace : false;
+      this.preserveComments = preserveComments != null ? preserveComments : false;
       this.root = new BeaNode("", 0, this.fileName, 0);
       this.curNode = this.root;
     }
@@ -64,19 +65,23 @@
       level != null ? level : level = 0;
       level++;
       rawTxt = txt.replace(/^\s+|\s+$/g, '');
-      if (!(rawTxt.length > 0)) {
+      if (!rawTxt.length) {
         return null;
       }
-      if (rawTxt[0] === '#') {
-        return null;
-      }
-      if (rawTxt.length > 2 && rawTxt[0] === '\\' && rawTxt[1] === '#') {
-        rawTxt = rawTxt.slice(1);
+      if (!this.preserveComments) {
+        if (rawTxt[0] === '#') {
+          return null;
+        }
+        rawTxt = rawTxt.replace(/[^\\]\#.*/, '');
+        rawTxt = rawTxt.replace(/\\#/g, '#');
       }
       if (!this.preserveWhitespace) {
         txt = rawTxt;
       } else {
         txt = txt.replace(/\s+$/g, '');
+      }
+      if (!txt.length) {
+        return null;
       }
       node = new BeaNode(txt, level, this.fileName, linenumber + 1);
       if (level === this.curNode.level) {

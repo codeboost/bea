@@ -1,27 +1,30 @@
-<html>
+<!doctype html>
+<html xmlns:ng="http://angularjs.org">
 <head>
-	
-	<script type="text/javascript" src="require.js"></script> 
-	<script>
-	
-		require.load([
-			'underscore.js',
-			'fs.js',
-			'util.js',
-			'beaparser.js',
-			'codeblock.js',
-			'mgr.js',
-			'classconvert.js',
-			'beautil.js',
-			'bealoader.js'
-		]);
-	</script>
-	<script type="text/javascript" src="bealoader.js"></script>
+	<title>Bea Demo</title>
+	<script type="text/javascript" src="./lib/require.js"></script> 
+	<script src="lib/web/angular-0.9.15.min.js" ng:autobind></script>
+	<script src="beaweb.js"></script>
 	
 </head>
 <body>
+
+	<div ng:controller = "BeaWeb" class="example">
+		<div>Bea version: {{bealoader.version}}</div>
+		
+		<label>Bea source:</label><br/>
+		<textarea rows='50' cols='140' name="beaSource" ng:change = 'beaSourceChange()'></textarea><br/>
+		
+		<input type='button' ng:click='compile()' value='Compile'><br/>
+		
+		<hr/>
+		
+		<pre ng:bind='fileSystem.out_cpp'>
+		</pre>
+
+	</div>
 	
-	Bea 0.1
+	
 
 </body>
 </html>

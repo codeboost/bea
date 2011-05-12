@@ -1,9 +1,10 @@
 (function() {
-  var CodeBlock, TypeManager, beautils, snippets, _;
+  var CodeBlock, TypeManager, beautils, fixt, snippets, _;
   _ = require('underscore');
   beautils = require('./beautils').u;
   CodeBlock = require('./codeblock').CodeBlock;
   snippets = require('./snippets');
+  fixt = snippets.fixt;
   TypeManager = (function() {
     function TypeManager(logger, namespaces) {
       this.logger = logger;
@@ -45,10 +46,18 @@
       return thatType;
     };
     TypeManager.prototype.add = function(typeNode, namespace) {
-      var alias, manual, tmp, type, typeName, _ref;
+      var alias, manual, t, tmp, type, typeName, _ref;
       tmp = typeNode.text.replace(/^@type\s+/, '');
+      if (/@wrapped/.test(tmp)) {
+        tmp = tmp.replace(/@wrapped\s*/, '');
+        t = new beautils.Type(tmp, namespace);
+        t.wrapped = true;
+        t.manual = true;
+        this.types.push(t);
+        return true;
+      }
       alias = '';
-      manual = tmp.match(/\s+@manual/) != null;
+      manual = /\s+@manual/.test(tmp);
       if (manual) {
         typeName = tmp.match(/(.+)\s+@manual/)[1];
       } else {
@@ -87,11 +96,11 @@
       var fnBlock;
       fnBlock = new CodeBlock.CodeBlock;
       if (type.wrapped) {
-        fnBlock.add("return bea::Wrapped<" + (type.fullType()) + ">::Is(v);");
+        fnBlock.add("return bea::ExposedClass<" + (fixt(type.fullType())) + ">::Is(v);");
         return fnBlock;
       }
       if (type.alias) {
-        fnBlock.add("return bea::Convert<" + type.alias + ">::Is(v);");
+        fnBlock.add("return bea::Convert<" + (fixt(type.alias)) + ">::Is(v);");
         return fnBlock;
       }
       if (type.manual || type.members.length === 0) {
@@ -106,7 +115,7 @@
       var fnBlock, memstr;
       fnBlock = new CodeBlock.CodeBlock;
       if (type.wrapped) {
-        fnBlock.add("return bea::Wrapped<" + (type.fullType()) + ">::FromJS(v, nArg);");
+        fnBlock.add("return bea::ExposedClass<" + (fixt(type.fullType())) + ">::FromJS(v, nArg);");
         return fnBlock;
       }
       if (type.alias) {
@@ -117,7 +126,7 @@
         return member.name;
       }).join(', ');
       fnBlock.add("const char* msg = \"Object with the following properties expected: " + memstr + ". This will be cast to '" + (type.fullType()) + "'\";");
-      fnBlock.add("if (!Is(v)) THROW();");
+      fnBlock.add("if (!Is(v)) BEATHROW();");
       fnBlock.add("v8::HandleScope scope;");
       if (type.manual || type.members.length === 0) {
         fnBlock.add("//Enter FromJS conversion code here...");
@@ -128,7 +137,7 @@
       fnBlock.add("v8::Local<v8::Object> obj = v->ToObject();");
       fnBlock.add("" + (type.fullType()) + " ret;");
       fnBlock.add(_.map(type.members, function(member) {
-        return "ret." + member.name + " = bea::Convert<" + (member.type.fullType()) + ">::FromJS(obj->Get(v8::String::NewSymbol(\"" + member.name + "\")), nArg);";
+        return "ret." + member.name + " = bea::Convert<" + (fixt(member.type.fullType())) + ">::FromJS(obj->Get(v8::String::NewSymbol(\"" + member.name + "\")), nArg);";
       }).join("\n"));
       fnBlock.add("return ret;");
       return fnBlock;
@@ -137,7 +146,7 @@
       var fnBlock;
       fnBlock = new CodeBlock.CodeBlock;
       if (type.wrapped) {
-        fnBlock.add("return bea::Wrapped<" + (type.fullType()) + ">::ToJS(v);");
+        fnBlock.add("return bea::ExposedClass<" + (fixt(type.fullType())) + ">::ToJS(v);");
         return fnBlock;
       }
       fnBlock.add("v8::HandleScope scope;");
@@ -149,7 +158,7 @@
       }
       fnBlock.add("v8::Local<v8::Object> obj = v8::Object::New();");
       fnBlock.add(_.map(type.members, function(member) {
-        return "obj->Set(v8::String::NewSymbol(\"" + member.name + "\"), bea::Convert<" + (member.type.fullType()) + ">::ToJS(v." + member.name + "));";
+        return "obj->Set(v8::String::NewSymbol(\"" + member.name + "\"), bea::Convert<" + (fixt(member.type.fullType())) + ">::ToJS(v." + member.name + "));";
       }).join('\n'));
       fnBlock.add("return scope.Close(obj);");
       return fnBlock;

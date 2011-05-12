@@ -1,25 +1,26 @@
 Running bea
 
-bea fileName.bea [-oh hfile -oc cppfile -manual]
--oh = output header file. overrides 'header' directive in the bea file
--oc = output cpp file. overrides 'cpp' directive in the bea file
--manual or -m = only the blank implementation of @manual methods and types will be written to the file specified by '-oc'
+	bea fileName.bea [-oh hfile -oc cppfile -manual]
+	-oh = output header file. overrides 'header' directive in the bea file
+	-oc = output cpp file. overrides 'cpp' directive in the bea file
+	-manual or -m = only the blank implementation of @manual methods and types will be written to the file specified by '-oc'
 
 Bea file syntax
 
-A bea file is a mixture of special directives (starting with @), C++ declarations and snippets of C++ code.
+	A bea file is a mixture of special directives (starting with @), C++ declarations and snippets of C++ code.
 
-Bea has been written in CoffeeScript and quite frankly, it has been one the most pleasurable programming experiences in my life. 
-The syntax of the bea file tries to borrow from the cleanliness of CoffeeScript (which borrows from Python/Ruby) - braces, semi-columns, etc are not used.
+	Bea has been written in CoffeeScript and quite frankly, it has been one the most pleasurable programming experiences in my life. 
+	The syntax of the bea file tries to borrow from the cleanliness of CoffeeScript (which borrows from Python/Ruby) - braces, semi-columns, etc are not used.
 
-The bea parser builds a tree of nodes from the file, based on line indentation.
-Each line is a node in the tree, lines below it, which are more indented, are it's children:
-
-	Line
-		Child Line
-			Child of Child line
-	AnotherLine
-		AnotherLine child
+	The bea parser builds a tree of nodes from the file, based on line indentation.
+	Each line is a node in the tree, lines below it, which are more indented, are it's children:
+	
+	//Javascript: Bea file structure
+		Line
+			Child Line
+				Child of Child line
+		AnotherLine
+			AnotherLine child
 		
 Lines which start with '#' are considered comments and are ignored.
 Lines which must start with '#' (usually inserted C++ preprocessor definitions) can be escaped:

@@ -1,4 +1,4 @@
-_ = require './lib/underscore'
+_ = require 'underscore'
 beautils = require('./beautils').u
 CodeBlock = require('./codeblock').CodeBlock
 snippets = require './snippets'
@@ -22,6 +22,7 @@ class ClassConverter
 		@classFns = {}
 		@className = ""
 		@nativeClassName = ""
+		@exposed = true	
 		@namespace = ''
 		@nsBlock = null
 		@accessors = {}
@@ -38,7 +39,7 @@ class ClassConverter
 	processClass: (cl, targetNamespace) ->
 	
 		@namespace = cl.namespace
-		if cl.node.text.match(/^@static\s+/)? then @isStatic = true else @isStatic = false
+		if /^@static\s+/.test cl.node.text then @isStatic = true else @isStatic = false
 		
 		[@className, @exposedName] = beautils.parseClassDirective cl.node
 		
@@ -56,7 +57,7 @@ class ClassConverter
 		
 		if not @options.manual
 			if not @isStatic
-				@globalBlock.add "DECLARE_EXPOSED(#{@classType});"
+				@globalBlock.add "DECLARE_EXPOSED_CLASS(#{@classType});"
 				
 				if !@classFns["__constructor"] 
 					@warn "No constructor defined for #{@className}!", cl.node
@@ -97,20 +98,26 @@ class ClassConverter
 		
 	#Parse a function declaration and it's arguments and store the result in the @classFns hash
 	processFunNode: (node) ->
-		isManual = node.text.match(/^\@manual\s+/)?
+	
+		#noexpose directive - means don't expose class to Javascript
+		if /^@noexpose/.test node.text
+			@exposed = false
+			return false
+		
+		isManual = /^@manual\s+/.test node.text
 
 		if isManual then str = node.text.substring(7) else str = node.text
 		
-		if node.text.match(/^\@accessor\s+/)? then return @parseAccessor node
+		if /^\@accessor\s+/.test node.text then return @parseAccessor node
 		
 		isPostAllocator = false
 		
-		if node.text.match(/^\@postAllocator/)? 
+		if /^\@postAllocator/.test node.text
 			if @isStatic then return @warn "Postallocator for static class ignored"
 			str = "void __postAllocator()"
 			@hasPostAllocator = true
 			
-		if node.text.match(/^\@destructor/)?
+		if /^\@destructor/.test node.text
 			if @isStatic then return @warn "Destructor for static class ignored"
 			@destructorNode = node
 			return true
@@ -136,7 +143,7 @@ class ClassConverter
 		fn.node = node
 		
 		#check sublines for @call directive
-		callNode = _.detect fn.sublines, (subline) -> subline.text.match(/^\@call/)?
+		callNode = _.detect fn.sublines, (subline) -> /^\@call/.test subline.text
 		
 		if callNode 
 			nodeText = callNode.text.replace(/^\@call\s*/,"");
@@ -240,7 +247,12 @@ class ClassConverter
 			initFn.add "obj->exposeProperty(\"#{name}\", accGet_#{name}, accSet_#{name});"
 		
 		initFn.add "//Expose object to the Javascript"
-		initFn.add "obj->exposeTo(target);"
+		if @exposed 
+			initFn.add "obj->exposeTo(target);"
+		else
+			initFn.add "//Class not exposed to the javascript. Must instantiate and expose it manually"
+			initFn.add "//obj->exposeTo(target);"
+			
 		return initFn
 		
 	#returns number of required arguments (eg. arguments with no default value)

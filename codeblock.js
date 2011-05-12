@@ -8,7 +8,7 @@
     child.__super__ = parent.prototype;
     return child;
   };
-  _ = require('./lib/underscore');
+  _ = require('underscore');
   beautils = require('./beautils').u;
   Code = (function() {
     function Code(declaration) {

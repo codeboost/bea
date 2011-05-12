@@ -3,6 +3,8 @@ beautils = require('./beautils').u
 CodeBlock = require('./codeblock').CodeBlock
 snippets = require('./snippets')
 
+fixt = snippets.fixt
+
 class TypeManager 
 	constructor: (@logger, @namespaces) ->
 		@types = []
@@ -10,7 +12,7 @@ class TypeManager
 	#add a 'wrapped' or exposed class to the list
 	addWrapped: (node, namespace) ->
 		[type] = beautils.parseClassDirective node
-		t = new new beautils.Type type, namespace
+		t = new beautils.Type type, namespace
 		t.wrapped = true
 		t.manual = false
 		@types.push t
@@ -46,8 +48,18 @@ class TypeManager
 		#type MyType @manual --> only generate conversion declaration when -m switch is present
 		#if declared as 'type MyType' (with no members) --> don't generate conversion code at all, user knows the conversions will compile
 	
+		#@type name @wrapped
+		#Means this is a manual type, but must be treated as a wrapped type
+		if /@wrapped/.test tmp
+			tmp = tmp.replace /@wrapped\s*/, ''
+			t = new beautils.Type tmp, namespace
+			t.wrapped = true
+			t.manual = true
+			@types.push t
+			return true
+	
 		alias = ''		
-		manual = tmp.match(/\s+@manual/)?
+		manual = /\s+@manual/.test tmp
 		
 		if manual 
 			typeName = tmp.match(/(.+)\s+@manual/)[1]
@@ -80,14 +92,14 @@ class TypeManager
 		
 		fnBlock = new CodeBlock.CodeBlock
 		
-		#Wrapped type -> forward to Wrapped<T>::Is()
+		#Wrapped type -> forward to ExposedClass<T>::Is()
 		if type.wrapped
-			fnBlock.add "return bea::Wrapped<#{type.fullType()}>::Is(v);"
+			fnBlock.add "return bea::ExposedClass<#{fixt type.fullType()}>::Is(v);"
 			return fnBlock
 
 		#alias, eg. type Double is double -> return Is<alias>(v). Compiler should recursively detect the right type
 		if type.alias 
-			fnBlock.add "return bea::Convert<#{type.alias}>::Is(v);"
+			fnBlock.add "return bea::Convert<#{fixt type.alias}>::Is(v);"
 			return fnBlock
 		
 		#@manual type -> add a comment to enter the code
@@ -107,7 +119,7 @@ class TypeManager
 		
 		fnBlock = new CodeBlock.CodeBlock
 		if type.wrapped
-			fnBlock.add "return bea::Wrapped<#{type.fullType()}>::FromJS(v, nArg);"
+			fnBlock.add "return bea::ExposedClass<#{fixt type.fullType()}>::FromJS(v, nArg);"
 			return fnBlock
 		
 		if type.alias 
@@ -119,7 +131,7 @@ class TypeManager
 		memstr = _.map(type.members, (member) -> member.name).join(', ')
 		
 		fnBlock.add "const char* msg = \"Object with the following properties expected: #{memstr}. This will be cast to '#{type.fullType()}'\";"
-		fnBlock.add "if (!Is(v)) THROW();"
+		fnBlock.add "if (!Is(v)) BEATHROW();"
 
 		fnBlock.add "v8::HandleScope scope;"		
 		if type.manual || type.members.length == 0
@@ -130,7 +142,7 @@ class TypeManager
 		
 		fnBlock.add "v8::Local<v8::Object> obj = v->ToObject();"
 		fnBlock.add "#{type.fullType()} ret;"
-		fnBlock.add _.map(type.members, (member) -> "ret.#{member.name} = bea::Convert<#{member.type.fullType()}>::FromJS(obj->Get(v8::String::NewSymbol(\"#{member.name}\")), nArg);").join("\n")
+		fnBlock.add _.map(type.members, (member) -> "ret.#{member.name} = bea::Convert<#{fixt member.type.fullType()}>::FromJS(obj->Get(v8::String::NewSymbol(\"#{member.name}\")), nArg);").join("\n")
 		fnBlock.add "return ret;"
 		return fnBlock
 	
@@ -139,7 +151,7 @@ class TypeManager
 		fnBlock = new CodeBlock.CodeBlock
 		
 		if type.wrapped
-			fnBlock.add "return bea::Wrapped<#{type.fullType()}>::ToJS(v);"
+			fnBlock.add "return bea::ExposedClass<#{fixt type.fullType()}>::ToJS(v);"
 			return fnBlock
 		
 		fnBlock.add "v8::HandleScope scope;"
@@ -151,7 +163,7 @@ class TypeManager
 			return fnBlock
 		
 		fnBlock.add "v8::Local<v8::Object> obj = v8::Object::New();"
-		fnBlock.add _.map(type.members, (member) -> "obj->Set(v8::String::NewSymbol(\"#{member.name}\"), bea::Convert<#{member.type.fullType()}>::ToJS(v.#{member.name}));").join('\n')
+		fnBlock.add _.map(type.members, (member) -> "obj->Set(v8::String::NewSymbol(\"#{member.name}\"), bea::Convert<#{fixt member.type.fullType()}>::ToJS(v.#{member.name}));").join('\n')
 		fnBlock.add "return scope.Close(obj);"
 		return fnBlock
 

@@ -1,9 +1,19 @@
 (function() {
-  var args, bea, beaFile, bealoader, debugIt, fs;
+  var args, bea, beaFile, bealoader, debugIt, fs, util;
   bealoader = require('./bealoader');
   fs = require('fs');
-  debugIt = require('./debugIt').debugIt;
+  debugIt = require('./debugit').debugIt;
+  util = require('util');
   console.log("Bea C++ to V8 Converter 0.1");
+  if (process.argv.length < 3) {
+    console.log('Usage: bea filename.bea [-m|-mt] [-o output_dir] [-f]');
+    console.log('Where:');
+    console.log('-m  = convert @manual functions only');
+    console.log('-mt = convert @manual types only');
+    console.log('-o  = output directory');
+    console.log('-f  = force file overwrite (valid with -m or -mt)');
+    process.exit(-1);
+  }
   args = require('./lib/argsparser').parse();
   if (args["node"].length < 2) {
     console.log("Error: bea file not specified. Nothing to do.");
@@ -20,19 +30,8 @@
   if (args["-force"] || args["-f"]) {
     bea.options.force = true;
   }
-  if (bea.options.manual && !args["-oc"]) {
-    console.log("Error: -manual present, but no -oc. You must specify output file for manual generation.");
-    process.exit(-1);
-  }
-  if (bea.options.mtypes && !args["-oh"]) {
-    console.log("Error: -mtypes present, but no -oh. You must specify output header file for manual types generation.");
-    process.exit(-1);
-  }
-  if (args["-oh"]) {
-    bea.hFilename = args["-oh"];
-  }
-  if (args["-oc"]) {
-    bea.cppFilename = args["-oc"];
+  if (args["-o"]) {
+    bea.outDir = args["-o"];
   }
   bealoader.doConvert(bea, beaFile);
   console.log("Exit");

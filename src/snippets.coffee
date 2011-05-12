@@ -1,19 +1,30 @@
 CodeBlock = require('./codeblock').CodeBlock
 
+#fix template type, add a space if type ends in >
+fixt = (type) ->
+	if />$/.test type then return type + ' ' 
+	return type
+	
+exports.fixt = fixt
+
 exports.FromJS = (type, arg, i, sc = ';') ->
-	"bea::Convert<#{type}>::FromJS(#{arg}, #{i})" + sc
+	"bea::Convert<#{fixt type}>::FromJS(#{arg}, #{i})" + sc
 
 exports.Is = (type, arg, sc = ';') ->
-	"bea::Convert<#{type}>::Is(#{arg})" + sc
+	if />$/.test type then type += ' '
+	"bea::Convert<#{fixt type}>::Is(#{arg})" + sc
 
 exports.Optional = (type, nArg, def, sc = ';') ->
-	"bea::Optional<#{type}>::FromJS(args, #{nArg}, #{def})" + sc
+	if />$/.test type then type += ' '
+	"bea::Optional<#{fixt type}>::FromJS(args, #{nArg}, #{def})" + sc
 	
 exports.OptionalIs = (type, nArg, sc = ';') ->
-	"bea::Optional<#{type}>::Is(args, #{nArg})" + sc
+	if />$/.test type then type += ' '
+	"bea::Optional<#{fixt type}>::Is(args, #{nArg})" + sc
 
 exports.ToJS = (type, value, sc = ';') ->
-	"bea::Convert<#{type}>::ToJS(#{value})" + sc
+	if />$/.test type then type += ' '
+	"bea::Convert<#{fixt type}>::ToJS(#{value})" + sc
 	
 #declarations
 exports.decl = {}
@@ -60,35 +71,36 @@ exports.impl.accessorSet = (className, name) ->
 
 exports.impl.accessorGetImpl = (thisType, accessorType, impl) ->
 	retVal = '; //TODO: store return value here'
-	if impl.length then retVal = " = bea::Convert<#{accessorType}>::ToJS(#{impl});"
+	if impl.length then retVal = " = bea::Convert<#{fixt accessorType}>::ToJS(#{impl});"
 	"""v8::HandleScope scope; 
-	#{thisType} _this = bea::Convert<#{thisType}>::FromJS(info.Holder(), 0); 
+	#{thisType} _this = bea::Convert<#{fixt thisType}>::FromJS(info.Holder(), 0); 
 	v8::Handle<v8::Value> retVal#{retVal}
 	return scope.Close(retVal);"""
 
 exports.impl.accessorSetImpl = (thisType, accessorType, impl) ->
 	if impl.length == 0 then impl = '//TODO: Set value here'
 	"""v8::HandleScope scope;
-	#{thisType} _this = bea::Convert<#{thisType}>::FromJS(info.Holder(), 0); 
-	#{accessorType} value = bea::Convert<#{accessorType}>::FromJS(v, 0);
+	#{thisType} _this = bea::Convert<#{fixt thisType}>::FromJS(info.Holder(), 0); 
+	#{accessorType} value = bea::Convert<#{fixt accessorType}>::FromJS(v, 0);
 	#{impl}
 	"""
 	
 exports.impl.exposeClass = (classType, exposedName) ->
-	"bea::Wrapped<#{classType}>* obj = EXPOSE_CLASS(#{classType}, \"#{exposedName}\");"
+	"bea::ExposedClass<#{fixt classType}>* obj = EXPOSE_CLASS(#{classType}, \"#{exposedName}\");"
 	
 exports.impl.exposeObject = (className, exposedName) ->
-	"bea::ExposedObject<#{className}>* obj = bea::ExposedObject<#{className}>::Create(new #{className}, \"#{exposedName}\");"
+	#"bea::ExposedStatic<#{className}>* obj = bea::ExposedStatic<#{className}>::Create(new #{className}, \"#{exposedName}\");"
+	"bea::ExposedStatic<#{className}>* obj = EXPOSE_STATIC(#{className}, \"#{exposedName}\");"
 	
 
 exports.fnConv = {}
 
 #"template<> bool Is<#{type.fullType()}*>(v8::Handle<v8::Value> v)"
 exports.ConvertStruct = (type) ->
-	struct = new CodeBlock.ClassBlock "template<> struct Convert<#{type}>"
+	struct = new CodeBlock.ClassBlock "template<> struct Convert<#{fixt type}>"
 	struct.Is = 	struct.add new CodeBlock.FunctionBlock "static bool Is(v8::Handle<v8::Value> v)"
 	struct.FromJS = struct.add new CodeBlock.FunctionBlock "static #{type} FromJS(v8::Handle<v8::Value> v, int nArg)"
-	struct.ToJS = 	struct.add new CodeBlock.FunctionBlock "static v8::Handle<v8::Value> ToJS(#{type} const& v)"
+	struct.ToJS = 	struct.add new CodeBlock.FunctionBlock "static v8::Handle<v8::Value> ToJS(#{fixt type} const& v)"
 	return struct
 	
 	

@@ -1,35 +1,54 @@
 (function() {
-  var CodeBlock;
+  var CodeBlock, fixt;
   CodeBlock = require('./codeblock').CodeBlock;
+  fixt = function(type) {
+    if (/>$/.test(type)) {
+      return type + ' ';
+    }
+    return type;
+  };
+  exports.fixt = fixt;
   exports.FromJS = function(type, arg, i, sc) {
     if (sc == null) {
       sc = ';';
     }
-    return ("bea::Convert<" + type + ">::FromJS(" + arg + ", " + i + ")") + sc;
+    return ("bea::Convert<" + (fixt(type)) + ">::FromJS(" + arg + ", " + i + ")") + sc;
   };
   exports.Is = function(type, arg, sc) {
     if (sc == null) {
       sc = ';';
     }
-    return ("bea::Convert<" + type + ">::Is(" + arg + ")") + sc;
+    if (/>$/.test(type)) {
+      type += ' ';
+    }
+    return ("bea::Convert<" + (fixt(type)) + ">::Is(" + arg + ")") + sc;
   };
   exports.Optional = function(type, nArg, def, sc) {
     if (sc == null) {
       sc = ';';
     }
-    return ("bea::Optional<" + type + ">::FromJS(args, " + nArg + ", " + def + ")") + sc;
+    if (/>$/.test(type)) {
+      type += ' ';
+    }
+    return ("bea::Optional<" + (fixt(type)) + ">::FromJS(args, " + nArg + ", " + def + ")") + sc;
   };
   exports.OptionalIs = function(type, nArg, sc) {
     if (sc == null) {
       sc = ';';
     }
-    return ("bea::Optional<" + type + ">::Is(args, " + nArg + ")") + sc;
+    if (/>$/.test(type)) {
+      type += ' ';
+    }
+    return ("bea::Optional<" + (fixt(type)) + ">::Is(args, " + nArg + ")") + sc;
   };
   exports.ToJS = function(type, value, sc) {
     if (sc == null) {
       sc = ';';
     }
-    return ("bea::Convert<" + type + ">::ToJS(" + value + ")") + sc;
+    if (/>$/.test(type)) {
+      type += ' ';
+    }
+    return ("bea::Convert<" + (fixt(type)) + ">::ToJS(" + value + ")") + sc;
   };
   exports.decl = {};
   exports.decl.method = function(name) {
@@ -70,29 +89,29 @@
     var retVal;
     retVal = '; //TODO: store return value here';
     if (impl.length) {
-      retVal = " = bea::Convert<" + accessorType + ">::ToJS(" + impl + ");";
+      retVal = " = bea::Convert<" + (fixt(accessorType)) + ">::ToJS(" + impl + ");";
     }
-    return "v8::HandleScope scope; \n" + thisType + " _this = bea::Convert<" + thisType + ">::FromJS(info.Holder(), 0); \nv8::Handle<v8::Value> retVal" + retVal + "\nreturn scope.Close(retVal);";
+    return "v8::HandleScope scope; \n" + thisType + " _this = bea::Convert<" + (fixt(thisType)) + ">::FromJS(info.Holder(), 0); \nv8::Handle<v8::Value> retVal" + retVal + "\nreturn scope.Close(retVal);";
   };
   exports.impl.accessorSetImpl = function(thisType, accessorType, impl) {
     if (impl.length === 0) {
       impl = '//TODO: Set value here';
     }
-    return "v8::HandleScope scope;\n" + thisType + " _this = bea::Convert<" + thisType + ">::FromJS(info.Holder(), 0); \n" + accessorType + " value = bea::Convert<" + accessorType + ">::FromJS(v, 0);\n" + impl;
+    return "v8::HandleScope scope;\n" + thisType + " _this = bea::Convert<" + (fixt(thisType)) + ">::FromJS(info.Holder(), 0); \n" + accessorType + " value = bea::Convert<" + (fixt(accessorType)) + ">::FromJS(v, 0);\n" + impl;
   };
   exports.impl.exposeClass = function(classType, exposedName) {
-    return "bea::Wrapped<" + classType + ">* obj = EXPOSE_CLASS(" + classType + ", \"" + exposedName + "\");";
+    return "bea::ExposedClass<" + (fixt(classType)) + ">* obj = EXPOSE_CLASS(" + classType + ", \"" + exposedName + "\");";
   };
   exports.impl.exposeObject = function(className, exposedName) {
-    return "bea::ExposedObject<" + className + ">* obj = bea::ExposedObject<" + className + ">::Create(new " + className + ", \"" + exposedName + "\");";
+    return "bea::ExposedStatic<" + className + ">* obj = EXPOSE_STATIC(" + className + ", \"" + exposedName + "\");";
   };
   exports.fnConv = {};
   exports.ConvertStruct = function(type) {
     var struct;
-    struct = new CodeBlock.ClassBlock("template<> struct Convert<" + type + ">");
+    struct = new CodeBlock.ClassBlock("template<> struct Convert<" + (fixt(type)) + ">");
     struct.Is = struct.add(new CodeBlock.FunctionBlock("static bool Is(v8::Handle<v8::Value> v)"));
     struct.FromJS = struct.add(new CodeBlock.FunctionBlock("static " + type + " FromJS(v8::Handle<v8::Value> v, int nArg)"));
-    struct.ToJS = struct.add(new CodeBlock.FunctionBlock("static v8::Handle<v8::Value> ToJS(" + type + " const& v)"));
+    struct.ToJS = struct.add(new CodeBlock.FunctionBlock("static v8::Handle<v8::Value> ToJS(" + (fixt(type)) + " const& v)"));
     return struct;
   };
 }).call(this);

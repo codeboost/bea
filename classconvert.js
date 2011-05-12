@@ -1,7 +1,7 @@
 (function() {
   var ClassConverter, CodeBlock, FnCall, beautils, snippets, _;
   var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
-  _ = require('./lib/underscore');
+  _ = require('underscore');
   beautils = require('./beautils').u;
   CodeBlock = require('./codeblock').CodeBlock;
   snippets = require('./snippets');
@@ -35,6 +35,7 @@
       this.classFns = {};
       this.className = "";
       this.nativeClassName = "";
+      this.exposed = true;
       this.namespace = '';
       this.nsBlock = null;
       this.accessors = {};
@@ -50,7 +51,7 @@
     ClassConverter.prototype.processClass = function(cl, targetNamespace) {
       var declaNs, ret, _ref;
       this.namespace = cl.namespace;
-      if (cl.node.text.match(/^@static\s+/) != null) {
+      if (/^@static\s+/.test(cl.node.text)) {
         this.isStatic = true;
       } else {
         this.isStatic = false;
@@ -66,7 +67,7 @@
       this.globalBlock = new CodeBlock.CodeBlock;
       if (!this.options.manual) {
         if (!this.isStatic) {
-          this.globalBlock.add("DECLARE_EXPOSED(" + this.classType + ");");
+          this.globalBlock.add("DECLARE_EXPOSED_CLASS(" + this.classType + ");");
           if (!this.classFns["__constructor"]) {
             this.warn("No constructor defined for " + this.className + "!", cl.node);
           }
@@ -108,24 +109,28 @@
     };
     ClassConverter.prototype.processFunNode = function(node) {
       var callNode, fn, isManual, isPostAllocator, nodeText, str;
-      isManual = node.text.match(/^\@manual\s+/) != null;
+      if (/^@noexpose/.test(node.text)) {
+        this.exposed = false;
+        return false;
+      }
+      isManual = /^@manual\s+/.test(node.text);
       if (isManual) {
         str = node.text.substring(7);
       } else {
         str = node.text;
       }
-      if (node.text.match(/^\@accessor\s+/) != null) {
+      if (/^\@accessor\s+/.test(node.text)) {
         return this.parseAccessor(node);
       }
       isPostAllocator = false;
-      if (node.text.match(/^\@postAllocator/) != null) {
+      if (/^\@postAllocator/.test(node.text)) {
         if (this.isStatic) {
           return this.warn("Postallocator for static class ignored");
         }
         str = "void __postAllocator()";
         this.hasPostAllocator = true;
       }
-      if (node.text.match(/^\@destructor/) != null) {
+      if (/^\@destructor/.test(node.text)) {
         if (this.isStatic) {
           return this.warn("Destructor for static class ignored");
         }
@@ -148,7 +153,7 @@
       fn.sublines = node.children;
       fn.node = node;
       callNode = _.detect(fn.sublines, function(subline) {
-        return subline.text.match(/^\@call/) != null;
+        return /^\@call/.test(subline.text);
       });
       if (callNode) {
         nodeText = callNode.text.replace(/^\@call\s*/, "");
@@ -257,7 +262,12 @@
         return initFn.add("obj->exposeProperty(\"" + name + "\", accGet_" + name + ", accSet_" + name + ");");
       }, this));
       initFn.add("//Expose object to the Javascript");
-      initFn.add("obj->exposeTo(target);");
+      if (this.exposed) {
+        initFn.add("obj->exposeTo(target);");
+      } else {
+        initFn.add("//Class not exposed to the javascript. Must instantiate and expose it manually");
+        initFn.add("//obj->exposeTo(target);");
+      }
       return initFn;
     };
     ClassConverter.prototype.requiredArgs = function(args) {

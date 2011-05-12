@@ -1,4 +1,4 @@
-_ = require './lib/underscore'
+_ = require 'underscore'
 beautils = require('./beautils').u
 
 

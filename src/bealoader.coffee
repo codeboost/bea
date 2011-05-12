@@ -1,11 +1,11 @@
-_ = require('./lib/underscore')
+_ = require('underscore')
 BeaParser 		= require('./beaparser').BeaParser
 CodeBlock 		= require('./codeblock').CodeBlock
 mgr 			= require('./mgr')		
 ClassConverter 	= require('./classconvert').ClassConverter
 beautils 		= require('./beautils')
 fs = require 'fs'
-util = require('util')
+util = require 'util'
 
 
 #Bea parser which handles the 'include' directives in the nodes
@@ -31,7 +31,8 @@ class RecursiveParser
 		
 		return ret
 		
-		
+	error: (msg) ->
+		console.log msg
 	warn: (msg, node) ->
 		fileName = (node?.fileName) ? ""
 		line = (node?.line) ? 0
@@ -76,21 +77,28 @@ class MessageLogger
 		
 	error: (msg, node) ->
 		[fileName, line] = [(node?.fileName) ? "", (node?.line) ? 0]
-		console.log "#{fileName}(#{line}): warning: #{msg}"
+		console.log "#{fileName}(#{line}): fatal error: #{msg}"
 		process.exit -1
 	
 
 class BeaLoader extends MessageLogger
-	constructor: (@curFileName) ->
+	constructor: () ->
 		
 		@classes = []	#list of defined classes
 		@namespaces = {} #namespace definitions
 		@typeMgr = new mgr.TypeManager this, @namespaces
 		@constants = []
 		@verbose = true
-		@hFilename = ""
-		@cppFilename = ""
 		@targetNamespace = ""
+		@projectName = ""
+		@outDir = '.'
+		
+		@files = 
+			cpp: 'out.cpp'
+			h: 'out.h'
+			manualcpp: 'manual.cpp'
+			manualh: 'manual.h'
+		
 		@options = 
 			manual: false
 			typeManager: @typeMgr
@@ -108,6 +116,36 @@ class BeaLoader extends MessageLogger
 			typesConverted: 0		#number of types converted
 			typesIgnored: 0	#number of types not converted
 			
+	filenameFromNode: (node) ->
+		filename = node.text.replace /^@\w+\s*=?\s*/, ''	#remove node type
+		filename = filename.replace /\"|\'/g, '' 	#remove quotes
+		filename = filename.replace /\s+/g, '_'		#convert spaces to underscore
+		return filename
+		
+	mkpath: (fileName) ->
+		return @outDir + '/' + fileName
+			
+	setProject: (node) ->
+		
+		if @projectName != '' then return @warn "@project already set.", node
+		
+		@projectName = node.text.replace(/^@project\s+/, '')
+		@info "Project name set to #{@projectName}", node
+		
+		@files = 
+			cpp: @projectName + '.cpp'
+			h: @projectName + '.h'
+			cppm: @projectName + '_m.cpp'
+			hm: @projectName + '_m.h'
+			
+		_.each node.children, (child) =>
+			switch child.type()
+				when "@h" then @files.h = @filenameFromNode child
+				when "@cpp" then @files.cpp = @filenameFromNode child
+				when "@hmanual" then @files.hm = @filenameFromNode child
+				when "@cppmanual" then @files.cppm = @filenameFromNode child
+				
+		@info "Files set to " + util.inspect(@files), node
 	
 	setTargetNamespace: (node) ->
 		@targetNamespace = node.text.replace(/^@targetNamespace\s+/, '')
@@ -118,7 +156,7 @@ class BeaLoader extends MessageLogger
 			namespace: namespace
 			node: classNode
 		
-		if not classNode.text.match /^@static\s+/
+		if not /^@static\s+/.test classNode.text
 			@typeMgr.addWrapped classNode, namespace
 			
 	addConst: (node) ->
@@ -132,22 +170,8 @@ class BeaLoader extends MessageLogger
 				when "@class" then @addClass node, nsname
 				when "@static" then @addClass node, nsname
 				when "@type" then @typeMgr.add node, nsname
+				when "@comment" then false
 				else @warn "Unexpected '#{node.type()}' within namespace #{nsname}", node
-		
-	setHFileName: (node) ->
-		#do not allow filename override
-		return @warn("h file name already set.", node) unless @hFilename == ""
-		filename = node.text.replace /^@hfilename\s+/, ""
-		filename = filename.replace /\"|\'/g, ""
-		@hFilename = filename
-	
-	setCPPFileName: (node) ->
-		#do not allow filename override
-		return @warn("cpp file name already set.", node) unless @cppFilename == ""
-		filename = node.text.replace /^@cppfilename\s+/, ""
-		filename = filename.replace /\"|\'/g, ""
-		@cppFilename =  filename 
-		
 		
 	addHeader: (hNode) ->
 		@header = hNode.toString('\n')
@@ -156,6 +180,8 @@ class BeaLoader extends MessageLogger
 		@cpp = cppNode.toString('\n')
 		
 	convertConstants: ->
+		if @constants.length == 0 then return false
+		
 		fn = new CodeBlock.FunctionBlock "void ExposeConstants(v8::Handle<v8::Object> target)"
 		_.each @constants, (constant) =>
 			fn.add "BEA_DEFINE_CONSTANT(target, #{constant});"
@@ -182,7 +208,7 @@ class BeaLoader extends MessageLogger
 		_.each exposed, (clExposed) ->
 			fn.add clExposed + "::_InitJSObject(target);"
 		
-		fn.add "ExposeConstants(target);"
+		if @constants.length > 0 then fn.add "ExposeConstants(target);"
 		
 		ret = 
 			h: declaNS
@@ -200,11 +226,15 @@ class BeaLoader extends MessageLogger
 		return hFile
 		
 	convertFull: ->
+		if not @canWriteFile(@files.cpp) then return false
+		if not @canWriteFile(@files.h) then return false
+
 		cppFile = new CodeBlock.CodeBlock 
 		hFile = new CodeBlock.CodeBlock
 		
-		cppFile.add @cpp
-		hFile.add @header
+		if @cpp then cppFile.add @cpp
+		if @header then hFile.add @header
+		
 		nsBea = cppFile.add new CodeBlock.NamespaceBlock "bea"
 		
 		nsBea.add @typeMgr.createConversions()
@@ -227,10 +257,13 @@ class BeaLoader extends MessageLogger
 			#the declarations
 			hFile.add ret.decla
 		
-		nsCPP = cppFile.add new CodeBlock.NamespaceBlock @targetNamespace
-		nsH = hFile.add new CodeBlock.NamespaceBlock @targetNamespace
-		nsCPP.add @convertConstants()
-		nsH.add "static void ExposeConstants(v8::Handle<v8::Object> target);"
+		
+		
+		if @constants.length
+			nsCPP = cppFile.add new CodeBlock.NamespaceBlock @targetNamespace
+			nsH = hFile.add new CodeBlock.NamespaceBlock @targetNamespace
+			nsCPP.add @convertConstants()
+			nsH.add "static void ExposeConstants(v8::Handle<v8::Object> target);"
 
 		
 		#create the bea exposer
@@ -238,23 +271,36 @@ class BeaLoader extends MessageLogger
 		if ret.h then hFile.add ret.h
 		if ret.cpp then cppFile.add ret.cpp
 		
-		hFile = @ifdefH hFile, @hFilename
+		hFile = @ifdefH hFile, @files.h
 		
-		fs.writeFileSync @cppFilename, cppFile.render(), 'ascii'
-		fs.writeFileSync @hFilename, hFile.render(), 'ascii'		
+		out = 
+			cpp: cppFile.render()
+			h: hFile.render()
+		fs.writeFileSync @mkpath(@files.cpp), out.cpp, 'ascii'
+		fs.writeFileSync @mkpath(@files.h), out.h, 'ascii'		
+		return out
+		
+	canWriteFile: (fileName) ->
+		outFilename = @mkpath(fileName)
+		
+		try
+			#check if the file exists. 
+			res = fs.statSync(outFilename)
+			
+			#bail out if -f command line switch is not preset - we don't want to overwrite the cpp file which the user might have modified
+			if res && res.size > 0 && !@options.force 
+				@error "#{outFilename} already exists. Use -f switch to overwrite."
+				return false
+		catch err
+			return true
+		return true
+		
 		
 	convertManual: ->
-		#check if the file exists. 
-		res = fs.statSync(@cppFilename)
-		
-		#bail out if -f command line switch is not preset - we don't want to overwrite the cpp file which the user might have modified
-		if res && res.size > 0 && !@options.force 
-			@error "#{@cppFilename} already exists. Use -f switch to overwrite."
-			return false
-			
+		if not @canWriteFile(@files.cppm) then return false
 			
 		cppFile = new CodeBlock.CodeBlock 
-		cppFile.add @cpp
+		if @cpp then cppFile.add @cpp
 		cppFile.add "using namespace bea;"
 		
 		nsBea = new CodeBlock.NamespaceBlock "bea"
@@ -274,40 +320,47 @@ class BeaLoader extends MessageLogger
 			#the actual implementation, in the cppNS namespace
 			if not ret.impl.empty() then cppFile.add ret.impl
 		
-		fs.writeFileSync @cppFilename, cppFile.render(), 'ascii'
+		out = 
+			cpp: cppFile.render()
+			
+		fs.writeFileSync outFilename, out.cpp, 'ascii'
+		return out
 		
 	CONVERT: ()->
 		#try
 			if @options.manual
-				@convertManual()
+				return @convertManual()
 			else
-				@convertFull()
+				return @convertFull()
 		#catch e
 		#	@error "Exception: " + e
 			
-	load:  (@curFileName) ->
+	load:  (fileName) ->
 		
 		parser = new RecursiveParser
 		
-		root = parser.parseFile @curFileName
+		root = parser.parseFile fileName
 		
 		return false unless root
 		
 		_.each root.children, (node, i) =>
 			switch node.type()
+				when "@project"	then @setProject node
 				when "@targetNamespace" then @setTargetNamespace node
 				when "@namespace" then @namespace node
 				when "@header" then @addHeader node
 				when "@cpp" then @addCpp node
-				when "@hfilename" then @setHFileName node
-				when "@cppfilename" then @setCPPFileName node
 				when "@const" then @addConst node
-				when "@comment" then ""
+				when "@comment" then false
 				else @warn "Unknown directive: #{node.type()}", node
 				
 		if _.isEmpty @targetNamespace 
 			@warn "@targetNamespace not defined. ", parser.root
 			@targetNamespace = 'targetNamespace'
+			
+		if !@projectName 
+			@warn "@project directive not found."
+			return false
 		
 		return true
 	
@@ -323,11 +376,14 @@ doConvert = (bea, beaFile) ->
 		process.exit -2
 
 	if not bea.options.manual
-		console.log "Output header file: #{bea.hFilename}"
+		console.log "Output header file: #{bea.files.h}"
+		console.log "Output cpp file: #{bea.files.cpp}"
 	else
 		console.log "*** -manual switch present. Only producing manual conversions."
+		console.log "Output header file: #{bea.files.hmanual}"
+		console.log "Output cpp file: #{bea.files.cppmanual}"
 		
-	console.log "Output cpp file: #{bea.cppFilename}"
+	
 		
 	console.log "Converting..."
 
@@ -347,6 +403,7 @@ doConvert = (bea, beaFile) ->
 
 exports.doConvert = doConvert
 exports.BeaLoader = BeaLoader
+exports.version = '0.5'
 
 
 				
