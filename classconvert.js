@@ -35,6 +35,7 @@
       this.classFns = {};
       this.className = "";
       this.nativeClassName = "";
+      this.virtual = false;
       this.exposed = true;
       this.namespace = '';
       this.nsBlock = null;
@@ -49,7 +50,7 @@
       return false;
     };
     ClassConverter.prototype.processClass = function(cl, targetNamespace) {
-      var declaNs, ret, _ref;
+      var declaNs, derivedDecla, ret, _ref;
       this.namespace = cl.namespace;
       if (/^@static\s+/.test(cl.node.text)) {
         this.isStatic = true;
@@ -64,6 +65,9 @@
       _.each(cl.node.children, __bind(function(child) {
         return this.processFunNode(child);
       }, this));
+      if (this.virtual) {
+        derivedDecla = this.createDerivedClass();
+      }
       this.globalBlock = new CodeBlock.CodeBlock;
       if (!this.options.manual) {
         if (!this.isStatic) {
@@ -142,6 +146,7 @@
         return this.warn("Cannot parse method declaration: '" + str + "'. Ignoring.", node);
       }
       if (fn.type.rawType === this.nativeClassName && fn.name === "") {
+        fn.orgName = fn.name;
         fn.name = '__constructor';
       }
       if (isManual) {
@@ -152,6 +157,9 @@
       fn.requiredArgs = this.requiredArgs(fn.args);
       fn.sublines = node.children;
       fn.node = node;
+      if (fn.virtual) {
+        this.virtual = true;
+      }
       callNode = _.detect(fn.sublines, function(subline) {
         return /^\@call/.test(subline.text);
       });
@@ -233,6 +241,34 @@
       }
       decBlock.add(new CodeBlock.CodeBlock("public:", false)).add("static void _InitJSObject(v8::Handle<v8::Object> target);");
       return decBlock;
+    };
+    ClassConverter.prototype.createDerivedClass = function() {
+      var classBlock, constructors, public, vfuncs;
+      classBlock = new CodeBlock.ClassBlock("class bea_" + this.classType + " : public " + this.classType + ", public bea::DerivedClass");
+      public = classBlock.add(new CodeBlock.CodeBlock("public:", false));
+      constructors = _.detect(this.classFns, function(fn) {
+        return fn.name === '__constructor';
+      });
+      _.each(constructors, function(constr) {
+        var cargs, dargs;
+        dargs = _.map(constr.args, arg(arg.org));
+        cargs = _.map(constr.args, arg(arg.name));
+        return public.add("bea_" + this.classType + "(" + (dargs.join(', ')) + ") : " + this.classType + "(" + (cargs.join(', ')) + "){}");
+      });
+      vfuncs = _.select(this.classFns, function(fn) {
+        return fn.virtual;
+      });
+      public.add("//Virtual functions");
+      return _.each(vfuncs, function(vfunc) {
+        var cargs, dargs, ret;
+        dargs = _.map(vfunc.args, arg(arg.org));
+        cargs = _.map(vfun.args, arg(arg.name));
+        ret = 'return';
+        if (vfunc.type.rawType === 'void') {
+          ret = '';
+        }
+        return public.add("inline " + (vfunc.type.fullType()) + " bea_" + vfunc.name + "(" + (dargs.join(', ')) + "){" + ret + " " + this.classType + "::" + vfunc.name + "(" + (cargs.join(', ')) + ");}");
+      });
     };
     ClassConverter.prototype.createInitFn = function() {
       var initFn;

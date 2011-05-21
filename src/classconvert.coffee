@@ -22,6 +22,7 @@ class ClassConverter
 		@classFns = {}
 		@className = ""
 		@nativeClassName = ""
+		@virtual = false	#has virtual functions
 		@exposed = true	
 		@namespace = ''
 		@nsBlock = null
@@ -52,6 +53,15 @@ class ClassConverter
 
 		#parse all functions
 		_.each cl.node.children, (child) =>	@processFunNode child
+		
+		#has virtual functions?
+		if @virtual 
+			#generate derived class block
+			#change className to bea_className
+			#function call will be _this->bea_functionName(arguments)
+			derivedDecla = @createDerivedClass();
+			
+			
 		
 		@globalBlock = new CodeBlock.CodeBlock
 		
@@ -132,7 +142,9 @@ class ClassConverter
 		if not fn then return @warn "Cannot parse method declaration: '#{str}'. Ignoring.", node
 		
 		if fn.type.rawType == @nativeClassName && fn.name == ""
+			fn.orgName = fn.name
 			fn.name = '__constructor'
+			
 	
 		if isManual then @logger.stats.manual++
 	
@@ -141,6 +153,8 @@ class ClassConverter
 		fn.requiredArgs = @requiredArgs fn.args
 		fn.sublines = node.children
 		fn.node = node
+		
+		if fn.virtual then @virtual = true
 		
 		#check sublines for @call directive
 		callNode = _.detect fn.sublines, (subline) -> /^\@call/.test subline.text
@@ -217,6 +231,42 @@ class ClassConverter
 		decBlock.add(new CodeBlock.CodeBlock "public:", false).add "static void _InitJSObject(v8::Handle<v8::Object> target);"
 		
 		return decBlock
+		
+	createDerivedClass: ->
+		
+		classBlock = new CodeBlock.ClassBlock "class bea_#{@classType} : public #{@classType}, public bea::DerivedClass"
+		
+		public = classBlock.add (new CodeBlock.CodeBlock "public:", false)
+		
+		#constructor
+		constructors = _.detect @classFns, (fn) -> fn.name == '__constructor'
+		
+		_.each constructors, (constr) ->
+			
+			#declaration arguments
+			dargs = _.map constr.args, (arg) arg.org
+			#call arguments
+			cargs = _.map constr.args, (arg) arg.name
+			
+			#bea_Derived() : Derived(){}
+			#bea_Derived(int k, CClass* ptr): Derived(k, ptr){}
+			public.add "bea_#{@classType}(#{dargs.join ', '}) : #{@classType}(#{cargs.join(', ')}){}"
+
+		#add virtual functions
+		
+		vfuncs = _.select @classFns, (fn) -> fn.virtual
+		
+		public.add "//Virtual functions"
+		_.each vfuncs, (vfunc) ->
+			dargs = _.map vfunc.args, (arg) arg.org
+			cargs = _.map vfun.args, (arg) arg.name
+			
+			ret = 'return'
+			if vfunc.type.rawType == 'void' then ret = ''
+			
+			public.add "inline #{vfunc.type.fullType()} bea_#{vfunc.name}(#{dargs.join ', '}){#{ret} #{@classType}::#{vfunc.name}(#{cargs.join ', '});}"
+		
+		
 		
 	#Create the InitJSObject function, to be added to the CPP file. 
 	#This function will be called by the exposing function

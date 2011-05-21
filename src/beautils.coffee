@@ -104,6 +104,11 @@ parseDeclaration = (str, namespace) ->
 	args = str.slice argsStart + 1, argsEnd 
 	decla = str.slice(0, argsStart);
 	
+	isPure = false
+	if /\s*=\s*0/.test decla
+		isPure = true
+		decla = decla.replace /\s*=\s*0;*/, ''
+	
 	parseArgs = (args) ->
 		if args.length == 0 then return []
 		ret = []
@@ -141,8 +146,13 @@ parseDeclaration = (str, namespace) ->
 	
 	fnArgs.push new Argument(arg, namespace) for arg in args
 	
+	isVirtual = false
+	if /^virtual\s+/.test decla
+		decla = decla.replace /^virtual\s+/, ''
+		isVirtual = true
+	
 	fnDec = new Argument decla, namespace
-	_.extend fnDec, {args: fnArgs}		
+	_.extend fnDec, {args: fnArgs, virtual: isVirtual, pure: isPure}		
 
 isSameOverload = (overload1, overload2) ->
 	overload1.name == overload2.name &&

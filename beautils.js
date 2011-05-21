@@ -101,7 +101,7 @@
     return Argument;
   })();
   parseDeclaration = function(str, namespace) {
-    var arg, args, argsEnd, argsStart, decla, fnArgs, fnDec, parseArgs, _i, _len;
+    var arg, args, argsEnd, argsStart, decla, fnArgs, fnDec, isPure, isVirtual, parseArgs, _i, _len;
     argsStart = str.indexOf('(');
     argsEnd = str.lastIndexOf(')');
     if (argsStart === -1 || argsEnd === -1) {
@@ -109,6 +109,11 @@
     }
     args = str.slice(argsStart + 1, argsEnd);
     decla = str.slice(0, argsStart);
+    isPure = false;
+    if (/\s*=\s*0/.test(decla)) {
+      isPure = true;
+      decla = decla.replace(/\s*=\s*0;*/, '');
+    }
     parseArgs = function(args) {
       var char, cur, paran, ret, symbol, _i, _len;
       if (args.length === 0) {
@@ -153,9 +158,16 @@
       arg = args[_i];
       fnArgs.push(new Argument(arg, namespace));
     }
+    isVirtual = false;
+    if (/^virtual\s+/.test(decla)) {
+      decla = decla.replace(/^virtual\s+/, '');
+      isVirtual = true;
+    }
     fnDec = new Argument(decla, namespace);
     return _.extend(fnDec, {
-      args: fnArgs
+      args: fnArgs,
+      virtual: isVirtual,
+      pure: isPure
     });
   };
   isSameOverload = function(overload1, overload2) {
