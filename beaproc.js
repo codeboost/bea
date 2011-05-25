@@ -33,6 +33,8 @@
   if (args["-o"]) {
     bea.outDir = args["-o"];
   }
-  bealoader.doConvert(bea, beaFile);
-  console.log("Exit");
+  debugIt(function() {
+    bealoader.doConvert(bea, beaFile);
+    return console.log("Exit");
+  });
 }).call(this);

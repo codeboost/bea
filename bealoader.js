@@ -59,17 +59,22 @@
       })) {
         return this.warn("File " + fileName + " already included!", node);
       }
+      console.log('Included file ' + fileName);
       return this.parseFile(fileName);
     };
     RecursiveParser.prototype.processIncludes = function(root) {
-      var children;
+      var children, gr;
       children = root.children;
+      gr = 0;
       _.each(root.children, __bind(function(node, i) {
         var ret, retc, _ref;
         if (node.type() === '@include') {
           ret = this.include(node);
           retc = (_ref = ret != null ? ret.children : void 0) != null ? _ref : [];
-          return children = children.slice(0, i).concat(retc, children.slice(i + 1));
+          children = children.slice(0, i + gr).concat(retc, children.slice(i + gr + 1));
+          if (retc.length) {
+            return gr = gr + retc.length - 1;
+          }
         }
       }, this));
       root.children = children;
@@ -123,7 +128,9 @@
         manual: false,
         typeManager: this.typeMgr,
         logger: this,
-        mtypes: false
+        mtypes: false,
+        derivedPrefix: '_D_',
+        environ: {}
       };
       this.stats = {
         classes: 0,
@@ -184,7 +191,7 @@
         node: classNode
       });
       if (!/^@static\s+/.test(classNode.text)) {
-        return this.typeMgr.addWrapped(classNode, namespace);
+        return this.typeMgr.addClassNode(classNode, namespace);
       }
     };
     BeaLoader.prototype.addConst = function(node) {
@@ -192,9 +199,9 @@
         return this.constants.push(con.text);
       }, this));
     };
-    BeaLoader.prototype.namespace = function(nsNode) {
+    BeaLoader.prototype.parseNamespace = function(nsNode) {
       var nsname;
-      nsname = nsNode.text.replace(/^@namespace\s+/, '');
+      nsname = nsNode.text.replace(/^@namespace\s*/, '');
       return _.each(nsNode.children, __bind(function(node) {
         switch (node.type()) {
           case "@class":
@@ -204,6 +211,10 @@
           case "@type":
             return this.typeMgr.add(node, nsname);
           case "@comment":
+            return false;
+          case "}":
+          case "};":
+          case "{":
             return false;
           default:
             return this.warn("Unexpected '" + (node.type()) + "' within namespace " + nsname, node);
@@ -277,8 +288,8 @@
         hFile.add(this.header);
       }
       nsBea = cppFile.add(new CodeBlock.NamespaceBlock("bea"));
-      nsBea.add(this.typeMgr.createConversions());
       convClasses = [];
+      this.options.typeMgr = this.typeMgr;
       _.each(this.classes, __bind(function(cl) {
         var cv, ret;
         this.stats.classes++;
@@ -293,6 +304,7 @@
         convClasses.push(ret.eClassName);
         return hFile.add(ret.decla);
       }, this));
+      nsBea.add(this.typeMgr.createConversions());
       if (this.constants.length) {
         nsCPP = cppFile.add(new CodeBlock.NamespaceBlock(this.targetNamespace));
         nsH = hFile.add(new CodeBlock.NamespaceBlock(this.targetNamespace));
@@ -359,7 +371,7 @@
       out = {
         cpp: cppFile.render()
       };
-      fs.writeFileSync(outFilename, out.cpp, 'ascii');
+      fs.writeFileSync(this.files.cppm, out.cpp, 'ascii');
       return out;
     };
     BeaLoader.prototype.CONVERT = function() {
@@ -383,7 +395,7 @@
           case "@targetNamespace":
             return this.setTargetNamespace(node);
           case "@namespace":
-            return this.namespace(node);
+            return this.parseNamespace(node);
           case "@header":
             return this.addHeader(node);
           case "@cpp":
@@ -391,6 +403,10 @@
           case "@const":
             return this.addConst(node);
           case "@comment":
+            return false;
+          case "}":
+          case "};":
+          case "{":
             return false;
           default:
             return this.warn("Unknown directive: " + (node.type()), node);

@@ -97,7 +97,7 @@
     if (impl.length === 0) {
       impl = '//TODO: Set value here';
     }
-    return "v8::HandleScope scope;\n" + thisType + " _this = bea::Convert<" + (fixt(thisType)) + ">::FromJS(info.Holder(), 0); \n" + accessorType + " value = bea::Convert<" + (fixt(accessorType)) + ">::FromJS(v, 0);\n" + impl;
+    return "v8::HandleScope scope;\n" + thisType + " _this = bea::Convert<" + (fixt(thisType)) + ">::FromJS(info.Holder(), 0); \n" + accessorType + " _accValue = bea::Convert<" + (fixt(accessorType)) + ">::FromJS(v, 0);\n" + impl;
   };
   exports.impl.exposeClass = function(classType, exposedName) {
     return "bea::ExposedClass<" + (fixt(classType)) + ">* obj = EXPOSE_CLASS(" + classType + ", \"" + exposedName + "\");";

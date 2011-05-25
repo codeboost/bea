@@ -47,18 +47,20 @@ class RecursiveParser
 		
 		if _.any(@includes, (nf) -> nf == fileName) then return @warn "File #{fileName} already included!", node
 		
+		console.log 'Included file ' + fileName
+		
 		return @parseFile fileName
 		
 	processIncludes: (root) ->
 		
 		children = root.children
-	
+		gr = 0
 		_.each root.children, (node, i) =>
 			if node.type() == '@include' 
 				ret = @include node
 				retc = ret?.children ? []
-				children = children.slice(0, i).concat(retc, children.slice(i + 1))
-		
+				children = children.slice(0, i + gr).concat(retc, children.slice(i + gr + 1))
+				if retc.length then gr = gr + retc.length - 1
 		root.children = children
 		return root
 		
@@ -104,6 +106,8 @@ class BeaLoader extends MessageLogger
 			typeManager: @typeMgr
 			logger: this
 			mtypes: false
+			derivedPrefix: '_D_'
+			environ: {}
 		@stats = 
 			classes: 0		#number of classes converted
 			converted: 0	#number of functions converted
@@ -157,20 +161,21 @@ class BeaLoader extends MessageLogger
 			node: classNode
 		
 		if not /^@static\s+/.test classNode.text
-			@typeMgr.addWrapped classNode, namespace
+			@typeMgr.addClassNode classNode, namespace
 			
 	addConst: (node) ->
 		_.each node.children, (con) =>
 			@constants.push con.text
 			
-	namespace: (nsNode) ->	
-		nsname = nsNode.text.replace /^@namespace\s+/, ''
+	parseNamespace: (nsNode) ->	
+		nsname = nsNode.text.replace /^@namespace\s*/, ''
 		_.each nsNode.children, (node) =>
 			switch node.type()
 				when "@class" then @addClass node, nsname
 				when "@static" then @addClass node, nsname
 				when "@type" then @typeMgr.add node, nsname
 				when "@comment" then false
+				when "}", "};", "{" then false
 				else @warn "Unexpected '#{node.type()}' within namespace #{nsname}", node
 		
 	addHeader: (hNode) ->
@@ -236,13 +241,15 @@ class BeaLoader extends MessageLogger
 		if @header then hFile.add @header
 		
 		nsBea = cppFile.add new CodeBlock.NamespaceBlock "bea"
-		
-		nsBea.add @typeMgr.createConversions()
-		
+
 		convClasses = []
+
+		
+		@options.typeMgr = @typeMgr
 		
 		_.each @classes, (cl) =>
 			@stats.classes++
+			
 			cv = new ClassConverter(@options)
 			ret = cv.processClass cl, @targetNamespace
 			
@@ -257,7 +264,10 @@ class BeaLoader extends MessageLogger
 			#the declarations
 			hFile.add ret.decla
 		
-		
+
+		#create type conversions
+		nsBea.add @typeMgr.createConversions()
+
 		
 		if @constants.length
 			nsCPP = cppFile.add new CodeBlock.NamespaceBlock @targetNamespace
@@ -323,7 +333,7 @@ class BeaLoader extends MessageLogger
 		out = 
 			cpp: cppFile.render()
 			
-		fs.writeFileSync outFilename, out.cpp, 'ascii'
+		fs.writeFileSync @files.cppm, out.cpp, 'ascii'
 		return out
 		
 	CONVERT: ()->
@@ -347,11 +357,12 @@ class BeaLoader extends MessageLogger
 			switch node.type()
 				when "@project"	then @setProject node
 				when "@targetNamespace" then @setTargetNamespace node
-				when "@namespace" then @namespace node
+				when "@namespace" then @parseNamespace node
 				when "@header" then @addHeader node
 				when "@cpp" then @addCpp node
 				when "@const" then @addConst node
 				when "@comment" then false
+				when "}", "};", "{" then false
 				else @warn "Unknown directive: #{node.type()}", node
 				
 		if _.isEmpty @targetNamespace 

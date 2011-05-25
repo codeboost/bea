@@ -97,17 +97,18 @@ class Argument
 	
 
 parseDeclaration = (str, namespace) ->
+
+
 	argsStart = str.indexOf '('
 	argsEnd = str.lastIndexOf ')'
 	return false if argsStart is -1 or argsEnd is -1
+
 	
-	args = str.slice argsStart + 1, argsEnd 
-	decla = str.slice(0, argsStart);
 	
-	isPure = false
-	if /\s*=\s*0/.test decla
-		isPure = true
-		decla = decla.replace /\s*=\s*0;*/, ''
+	args = trim str.slice(argsStart + 1, argsEnd)
+	decla = trim(str.slice(0, argsStart))
+	
+	isPure = /\s*=\s*0/.test str
 	
 	parseArgs = (args) ->
 		if args.length == 0 then return []
@@ -163,12 +164,24 @@ hasOverload = (list, overload) ->
 		isSameOverload over, overload	
 	
 parseClassDirective = (node) ->
-	className = (node.text.replace /^\s*@class\s+|^\s*@static\s+/, '').replace(/\'|\"/g, '')
+	className = node.text.replace /{\s*$/, ''
+	className = (className.replace /^\s*@class\s+|^\s*@static\s+/, '').replace(/\'|\"/g, '')
+
+	[className, _derived] = className.split ' : '
+	
+	if _derived
+		derived = _.map _derived.split(','), (derived) ->
+			derived.replace(/\s*public\s+/, '').replace /^\s+|\s+$/, ''
+	
 	tmp = className.split ' '
 	className = tmp[0]
 	exposedName = (tmp[1] ? className).replace(/\s+/g, '_')
-	return [className, exposedName]
-
+	ret = 
+		className: className
+		exposedName: exposedName
+		parentClass: derived
+	return ret
+	
 exports.u = 
 	parseArg: parseArg
 	tabify: tabify

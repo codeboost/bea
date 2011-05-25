@@ -81,7 +81,7 @@ exports.impl.accessorSetImpl = (thisType, accessorType, impl) ->
 	if impl.length == 0 then impl = '//TODO: Set value here'
 	"""v8::HandleScope scope;
 	#{thisType} _this = bea::Convert<#{fixt thisType}>::FromJS(info.Holder(), 0); 
-	#{accessorType} value = bea::Convert<#{fixt accessorType}>::FromJS(v, 0);
+	#{accessorType} _accValue = bea::Convert<#{fixt accessorType}>::FromJS(v, 0);
 	#{impl}
 	"""
 	

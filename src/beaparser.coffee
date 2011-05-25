@@ -5,6 +5,7 @@ class BeaNode
 		@parent = null
 	
 	addChild: (node)->
+		if typeof node == "string" then node = new BeaNode node, @level + 1, @fileName
 		node.parent = this
 		@children.push node
 		node
@@ -44,6 +45,7 @@ class BeaParser
 	#Indentation determines the node's level
 	#Throws exception if indentation is invalid
 	parseLine: (txt, linenumber) ->
+
 		level = txt.match(/(^\s+)/g)?[0].length; level?=0; level++
 		
 		rawTxt = txt.replace(/^\s+|\s+$/g, '')
@@ -67,11 +69,14 @@ class BeaParser
 			
 		return null unless txt.length
 		
+		#replace all tab chars with spaces 
+		txt = txt.replace /\t/g, ' '
+		
 		node = new BeaNode txt, level, @fileName, linenumber + 1
 		
 		if level == @curNode.level
 			@curNode.parent.addChild node
-		else if level == @curNode.level + 1
+		else if level >= @curNode.level + 1
 			@curNode.addChild node
 		else if level < @curNode.level 	
 			#walk up until we find the parent 

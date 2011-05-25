@@ -28,6 +28,6 @@ if args["-manual"] || args["-m"] then bea.options.manual = true
 if args["-mtypes"] || args["-mt"] then bea.options.mtypes = true
 if args["-force"] || args["-f"] then bea.options.force = true
 if args["-o"] then bea.outDir = args["-o"]
-
-bealoader.doConvert bea, beaFile
-console.log "Exit"
+debugIt ->
+	bealoader.doConvert bea, beaFile
+	console.log "Exit"

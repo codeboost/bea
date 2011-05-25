@@ -11,13 +11,28 @@
       this.namespaces = namespaces;
       this.types = [];
     }
-    TypeManager.prototype.addWrapped = function(node, namespace) {
-      var t, type;
-      type = beautils.parseClassDirective(node)[0];
-      t = new beautils.Type(type, namespace);
-      t.wrapped = true;
-      t.manual = false;
-      return this.types.push(t);
+    TypeManager.prototype.addWrapped = function(type, baseType) {
+      type.wrapped = true;
+      type.manual = false;
+      if (!this.isWrapped(type)) {
+        this.types.push(type);
+      }
+      if (baseType) {
+        this.types.push(baseType);
+        baseType.alias = type.fullType();
+        baseType.manual = false;
+        return baseType.wrapped = true;
+      }
+    };
+    TypeManager.prototype.addClassNode = function(classNode, namespace) {
+      var cl, cltype;
+      cl = beautils.parseClassDirective(classNode);
+      cltype = new beautils.Type(cl.className, namespace);
+      cltype.wrapped = true;
+      cltype.manual = false;
+      if (!this.findWrapped(cltype)) {
+        return this.types.push(cltype);
+      }
     };
     TypeManager.prototype.isWrapped = function(type) {
       var wrapped;
@@ -25,6 +40,15 @@
         return t.wrapped;
       });
       return _.any(wrapped, function(wt) {
+        return wt.rawType === type.rawType && wt.namespace === type.namespace;
+      });
+    };
+    TypeManager.prototype.findWrapped = function(type) {
+      var wrapped;
+      wrapped = _.filter(this.types, function(t) {
+        return t.wrapped;
+      });
+      return _.detect(wrapped, function(wt) {
         return wt.rawType === type.rawType && wt.namespace === type.namespace;
       });
     };
@@ -76,14 +100,17 @@
       return this.types.push(type);
     };
     TypeManager.prototype.getMembers = function(typeNode, type, namespace) {
-      var members;
+      var children, members;
       if (type.alias) {
         return [];
       }
       members = [];
       if (!type.manual) {
-        members = _.map(typeNode.children, function(line) {
-          return new beautils.Argument(line.text, namespace);
+        children = _.select(typeNode.children, function(n) {
+          return !/^\s*\/\//.test(n.text);
+        });
+        members = _.map(children, function(line) {
+          return new beautils.Argument(line.text.replace(';', '').replace(/\/\/.*$/, ''), namespace);
         });
       } else {
         members = _.map(typeNode.children, function(line) {
@@ -96,7 +123,11 @@
       var fnBlock;
       fnBlock = new CodeBlock.CodeBlock;
       if (type.wrapped) {
-        fnBlock.add("return bea::ExposedClass<" + (fixt(type.fullType())) + ">::Is(v);");
+        if (!type.alias) {
+          fnBlock.add("return bea::ExposedClass<" + (fixt(type.fullType())) + ">::Is(v);");
+        } else {
+          fnBlock.add("return " + snippets.Is(type.alias + '*', 'v'));
+        }
         return fnBlock;
       }
       if (type.alias) {
@@ -115,7 +146,11 @@
       var fnBlock, memstr;
       fnBlock = new CodeBlock.CodeBlock;
       if (type.wrapped) {
-        fnBlock.add("return bea::ExposedClass<" + (fixt(type.fullType())) + ">::FromJS(v, nArg);");
+        if (!type.alias) {
+          fnBlock.add("return bea::ExposedClass<" + (fixt(type.fullType())) + ">::FromJS(v, nArg);");
+        } else {
+          fnBlock.add("return " + snippets.FromJS(type.alias + '*', 'v', 'nArg'));
+        }
         return fnBlock;
       }
       if (type.alias) {
@@ -146,7 +181,15 @@
       var fnBlock;
       fnBlock = new CodeBlock.CodeBlock;
       if (type.wrapped) {
-        fnBlock.add("return bea::ExposedClass<" + (fixt(type.fullType())) + ">::ToJS(v);");
+        if (!type.alias) {
+          fnBlock.add("return bea::ExposedClass<" + (fixt(type.fullType())) + ">::ToJS(v);");
+        } else {
+          fnBlock.add("return " + snippets.ToJS(type.alias + '*', "static_cast<" + (fixt(type.alias)) + "*>(v)"));
+        }
+        return fnBlock;
+      }
+      if (type.alias) {
+        fnBlock.add("return " + snippets.ToJS(type.alias, "v"));
         return fnBlock;
       }
       fnBlock.add("v8::HandleScope scope;");

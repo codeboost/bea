@@ -20,6 +20,7 @@ class FnCall
 class ClassConverter
 	constructor: (@options)->
 		@classFns = {}
+			
 		@className = ""
 		@nativeClassName = ""
 		@virtual = false	#has virtual functions
@@ -27,10 +28,12 @@ class ClassConverter
 		@namespace = ''
 		@nsBlock = null
 		@accessors = {}
-		@hasPostAllocator = false
 		@destructorNode = null
 		@typeManager = @options.typeManager
 		@logger = @options.logger
+		@virtCount = 0
+		@environ = @options.environ;
+		@virtualCount = 0
 		
 	warn: (msg, node) ->
 		@logger.warn msg, node
@@ -42,38 +45,74 @@ class ClassConverter
 		@namespace = cl.namespace
 		if /^@static\s+/.test cl.node.text then @isStatic = true else @isStatic = false
 		
-		[@className, @exposedName] = beautils.parseClassDirective cl.node
+		cldef = beautils.parseClassDirective cl.node
+		
+		@className = cldef.className
+		@exposedName = cldef.exposedName
+		@parentClass = cldef.parentClass
+
+
+		#inherit from parent
+		if @parentClass
+			_.each @parentClass, (parentClass) =>
+				parentType = new beautils.Type parentClass, @namespace
+				parentFns = @environ[parentType.namespace][parentType.rawType]
+				if !parentFns
+					@warn "Unkown base class '#{parentClass}'", cl.node
+				else
+					#inherit all non-virtual members from parent 
+					#virtual functions: if defined
+					_.extend @classFns, parentFns.fns
+					delete @classFns["__constructor"]
+					delete @classFns["__destructor"]
+					@virtualCount += parentFns.virtualCount
+
+		@nsBlock = new CodeBlock.NamespaceBlock targetNamespace
 		
 		@nativeClassName = @className
+		@classType = new beautils.Type @nativeClassName, @namespace
 		@className = 'J' + @nativeClassName
 		
 		
-		@classType = (new beautils.Type @nativeClassName, @namespace).fullType();
-		@nsBlock = new CodeBlock.NamespaceBlock targetNamespace
-
-		#parse all functions
-		_.each cl.node.children, (child) =>	@processFunNode child
 		
-		#has virtual functions?
-		if @virtual 
-			#generate derived class block
-			#change className to bea_className
-			#function call will be _this->bea_functionName(arguments)
-			derivedDecla = @createDerivedClass();
+		#make sure there is a postAllocator defined for 
+		if !@isStatic 
+			if !cl.node.findChild "@postAllocator" then cl.node.addChild "@postAllocator"
+
+		
+		#parse all functions
+		_.each cl.node.children, (child) =>	
+			if /^public\s*:/.test child.text
+				_.each child.children, (chld) => @processFunNode chld
+			else if /^private\s*:|^protected\s*:/.test child.text 
+				@warn 'Private and protected members ignored.', child
+			else	
+				@processFunNode child
+
+		#save raw processed class in the global 'environ' thing
+		#we may revisit this class if another class derives from it
+		if !@environ[@namespace]  
+			@environ[@namespace] = {}
+
+		@environ[@namespace][@nativeClassName] = 
+			fns: @classFns
+			virtualCount: @virtualCount		
+		
+		#if virtual functions are defined, create a derived class which acts
+		#as the native class
+		if @virtualCount > 0
+			@baseType = @classType
+			@nativeClassName = @options.derivedPrefix + @nativeClassName
+			@classType = new beautils.Type @nativeClassName, targetNamespace
+			#@options.typeMgr.addDerivedClass(@baseType, @nativeType)
+
 			
-			
+		if not @isStatic
+			@options.typeManager.addWrapped @classType, @baseType
+		
+
 		
 		@globalBlock = new CodeBlock.CodeBlock
-		
-		if not @options.manual
-			if not @isStatic
-				@globalBlock.add "DECLARE_EXPOSED_CLASS(#{@classType});"
-				
-				if !@classFns["__constructor"] 
-					@warn "No constructor defined for #{@className}!", cl.node
-					
-			else
-				@globalBlock.add "DECLARE_STATIC(#{targetNamespace}::#{@className});"
 		
 		#produce destructor
 		if !@options.manual && @destructorNode
@@ -95,6 +134,28 @@ class ClassConverter
 		if !@options.manual #only cpp must be generated for manual
 			declaNs = new CodeBlock.NamespaceBlock targetNamespace
 			declaNs.add @createDeclaration()
+			
+			#has virtual functions?
+			if @virtualCount > 0 
+				#generate derived class block
+				#change className to bea_className
+				#function call will be _this->bea_functionName(arguments)
+				derivedDecla = @createDerivedClass();
+				declaNs.add derivedDecla.decla
+				@nsBlock.add derivedDecla.impl
+				
+					
+					
+		if not @options.manual
+			if not @isStatic
+				@globalBlock.add "DECLARE_EXPOSED_CLASS(#{@classType.fullType()});"
+				
+				if !@classFns["__constructor"] 
+					@warn "No constructor defined for #{@className}!", cl.node
+					
+			else
+				@globalBlock.add "DECLARE_STATIC(#{targetNamespace}::#{@className});"
+					
 		
 		ret = 
 			global: @globalBlock
@@ -108,29 +169,64 @@ class ClassConverter
 		
 	#Parse a function declaration and it's arguments and store the result in the @classFns hash
 	processFunNode: (node) ->
+
+		#ignore C++ comments
+		return false if /^\/\//.test node.text 
 	
 		#noexpose directive - means don't expose class to Javascript
 		if /^@noexpose/.test node.text
 			@exposed = false
 			return false
 		
-		isManual = /^@manual\s+/.test node.text
-
-		if isManual then str = node.text.substring(7) else str = node.text
-		
-		if /^\@accessor\s+/.test node.text then return @parseAccessor node
-		
-		isPostAllocator = false
-		
-		if /^\@postAllocator/.test node.text
-			if @isStatic then return @warn "Postallocator for static class ignored"
-			str = "void __postAllocator()"
-			@hasPostAllocator = true
+		if /^@manual\s+/.test node.text
+			isManual = true
+			str = node.text.replace /^@manual\s+/, ''
+		else 
+			str = node.text
 			
-		if /^\@destructor/.test node.text
-			if @isStatic then return @warn "Destructor for static class ignored"
+			
+		#remove end comments			
+		str = str.replace /\s*\/\/.*$/g, '' 
+		
+		return @parseAccessor node if /^\@accessor\s+/.test str 
+		
+		if /^\@postAllocator/.test str
+			if @isStatic then return @warn "Postallocator for static class ignored", node
+			str = "void __postAllocator()"
+			
+		#destructor is something which starts with ~ or virtual ~
+		
+		return false if /^~|^virtual\s+~/.test str 			#str = '@destructor'
+			
+		if /^\@destructor/.test str 
+			if @isStatic then return @warn "Destructor for static class ignored", node
 			@destructorNode = node
 			return true
+		
+		str = str.replace /;\s*$/, ''
+			
+		#If string doesn't look like a function call, but has a space, 
+		#we assume that it is in the form Type name and we generate a r/w accessor for it
+		if str.indexOf("(") == -1 && /\s+/.test str 
+			str = str.replace /\s+/g, ' '
+			fspace = str.indexOf ' '
+			accType = str.slice 0, fspace 
+			_accName = str.slice fspace
+			#declared as int x, y
+			_.each _accName.split(','), (accName) =>
+				accName = beautils.trim(accName)
+				return false unless accName.length
+				accessor = 
+					type: new beautils.Type accType, @namespace
+					name: accName
+					read: "_this->#{accName}"
+					write: "_this->#{accName} = _accValue;"
+				@addAccessor accessor, node
+			return true
+			
+		if /\s+operator\s*[=\+\/\\\*<>\^\-]*/.test str
+			return @warn 'Operator overloading not supported. Declaration ignored', node
+
 			
 		fn = beautils.parseDeclaration str, @namespace
 		#returns {
@@ -153,8 +249,10 @@ class ClassConverter
 		fn.requiredArgs = @requiredArgs fn.args
 		fn.sublines = node.children
 		fn.node = node
+		fn.parentClass = @nativeClassName
 		
-		if fn.virtual then @virtual = true
+		if fn.virtual 
+			@virtualCount++
 		
 		#check sublines for @call directive
 		callNode = _.detect fn.sublines, (subline) -> /^\@call/.test subline.text
@@ -164,15 +262,23 @@ class ClassConverter
 			fn.callText = _.compact([nodeText, callNode.toString()]).join '\n'
 			fn.sublines = _.without fn.sublines, callNode
 		
+		
+		
 		if @classFns[fn.name]
-			if not beautils.hasOverload(@classFns[fn.name], fn)
+			if not beautils.hasOverload @classFns[fn.name], fn
 				@classFns[fn.name].push fn
+				
 		else
 			@classFns[fn.name] = [fn]
 			@classFns[fn.name].name = fn.name
 			@classFns[fn.name].type = fn.type
+			
 		return true
-
+		
+	addAccessor: (accessor, node) ->
+		if @accessors[accessor.name] then return @warn "Accessor: '#{accessor.name}': accessor already defined. Second definition ignored", node
+		@accessors[accessor.name] = accessor
+		
 	#Parse an accessor node, add to @accessors
 	parseAccessor: (node) ->
 		parts = node.text.match /^\@accessor\s+(\w+)\s+(\w+)/
@@ -182,8 +288,6 @@ class ClassConverter
 			name: parts[1]
 			type: parts[2]
 			
-		if @accessors[accessor.name] then return @warn "Accessor: '#{accessor.name}': accessor already defined. Second definition ignored", node
-		
 		if not accessor.type then accessor.type = 'int'; @warn "Accessor '#{accessor.name}' : type not defined, int assumed", node
 		
 		read = node.childType "@get"
@@ -196,7 +300,7 @@ class ClassConverter
 		accessor.read = (read?.text.replace(/^@get\s*/, '')) ? ""
 		accessor.write = (write?.text.replace(/^@set\s*/, '')) ? ""
 		accessor.node = node
-		@accessors[accessor.name] = accessor		
+		@addAccessor accessor
 		
 	#Create the class declaration. Include methods, accessors, and destructor. Included in the header file
 	createDeclaration: ->
@@ -232,40 +336,94 @@ class ClassConverter
 		
 		return decBlock
 		
+	#Creates a 'hidden' derived class from the original class in which
+	#the virtual functions are implemented
+	#TODO: This function needs cleanup
 	createDerivedClass: ->
 		
-		classBlock = new CodeBlock.ClassBlock "class bea_#{@classType} : public #{@classType}, public bea::DerivedClass"
+		classBlock = new CodeBlock.ClassBlock "class #{@nativeClassName} : public #{@baseType.fullType()}, public bea::DerivedClass"
 		
 		public = classBlock.add (new CodeBlock.CodeBlock "public:", false)
 		
 		#constructor
 		constructors = _.detect @classFns, (fn) -> fn.name == '__constructor'
 		
-		_.each constructors, (constr) ->
+		_.each constructors, (constr) =>
 			
 			#declaration arguments
-			dargs = _.map constr.args, (arg) arg.org
+			dargs = _.map constr.args, (arg) -> arg.org
 			#call arguments
-			cargs = _.map constr.args, (arg) arg.name
+			cargs = _.map constr.args, (arg) -> arg.name
 			
 			#bea_Derived() : Derived(){}
 			#bea_Derived(int k, CClass* ptr): Derived(k, ptr){}
-			public.add "bea_#{@classType}(#{dargs.join ', '}) : #{@classType}(#{cargs.join(', ')}){}"
+			public.add "#{@nativeClassName}(#{dargs.join ', '}) : #{@baseType.fullType()}(#{cargs.join(', ')}){}"
 
 		#add virtual functions
+		vfuncs = []
+		_.each @classFns, (fn) -> _.each fn, (over) -> if over.virtual then vfuncs.push over
 		
-		vfuncs = _.select @classFns, (fn) -> fn.virtual
 		
-		public.add "//Virtual functions"
-		_.each vfuncs, (vfunc) ->
-			dargs = _.map vfunc.args, (arg) arg.org
-			cargs = _.map vfun.args, (arg) arg.name
+		#native-called virtual functions go into the .cpp file
+		#this is because we may return specializations of Convert<> from these functions
+		#and this must not happen before the explicit specializations of Convert<> generated by TypeManager.
+		
+		implBlock = new CodeBlock.CodeBlock
+		
+		publicv = public.add new CodeBlock.CodeBlock "", false
+		publicv.add "//JS: These virtual functions will only be called from Javascript"
+		publicd = public.add new CodeBlock.CodeBlock "", false
+		publicd.add "//Native: These virtual functions will only be called from native code"
+		
+		_.each vfuncs, (vfunc) =>
+			dargs = _.map vfunc.args, (arg) -> arg.org
+			cargs = _.map vfunc.args, (arg) -> arg.name
+			
+			vfunc.callAs = "_d_" + vfunc.name
 			
 			ret = 'return'
 			if vfunc.type.rawType == 'void' then ret = ''
 			
-			public.add "inline #{vfunc.type.fullType()} bea_#{vfunc.name}(#{dargs.join ', '}){#{ret} #{@classType}::#{vfunc.name}(#{cargs.join ', '});}"
-		
+			if vfunc.pure
+				funcontents = "throw bea::Exception(\"'#{vfunc.name}' : pure virtual function not defined.\");"
+			else
+				funcontents = "#{ret} #{@baseType.fullType()}::#{vfunc.name}(#{cargs.join ', '});"
+			
+			publicv.add(new CodeBlock.FunctionBlock "inline #{vfunc.type.org} _d_#{vfunc.name}(#{dargs.join ', '})").add funcontents
+			
+			
+			vfuncdecla = "#{vfunc.type.org} #{vfunc.name}(#{dargs.join ', '})"
+			
+			publicd.add vfuncdecla + ';'
+			
+			
+			fn = implBlock.add new CodeBlock.FunctionBlock "#{vfunc.type.org} #{@nativeClassName}::#{vfunc.name}(#{dargs.join ', '})"
+			fn.add "v8::HandleScope v8scope; v8::Handle<v8::Value> v8retVal;"
+			cif = fn.add new CodeBlock.CodeBlock "if (bea_derived_hasOverride(\"#{vfunc.name}\"))"
+			
+			arglist = _.map vfunc.args, (arg) =>
+				snippets.ToJS(arg.type.org, arg.name, '')
+				
+			if vfunc.args.length > 0
+				cif.add "v8::Handle<v8::Value> v8args[#{vfunc.args.length}] = {#{arglist.join(', ')}};"
+			else
+				cif.add "v8::Handle<v8::Value> v8args[1];"
+				
+			cif.add "v8retVal = bea_derived_callJS(\"#{vfunc.name}\", #{vfunc.args.length}, v8args);"
+			
+			fn.add "if (v8retVal.IsEmpty()) #{ret} _d_#{vfunc.name}(#{cargs.join ', '});"
+			
+			if vfunc.type.rawType != 'void'
+				nativeType = @nativeType(vfunc.type)
+				#shit, this is messy, but no time now
+				if nativeType.indexOf('*') != -1 && !vfunc.type.isPointer then castBack = '*' else castBack = ''
+				fn.add "return #{castBack}" + snippets.FromJS(nativeType, "v8retVal", 0)
+			
+			
+		return {
+			decla: classBlock
+			impl: implBlock
+		}
 		
 		
 	#Create the InitJSObject function, to be added to the CPP file. 
@@ -273,7 +431,7 @@ class ClassConverter
 	createInitFn: ->
 		initFn = new CodeBlock.FunctionBlock snippets.decl.InitJSObject(@className) 
 		if not @isStatic
-			initFn.add snippets.impl.exposeClass(@classType, @exposedName)
+			initFn.add snippets.impl.exposeClass(@classType.fullType(), @exposedName)
 		else
 			initFn.add snippets.impl.exposeObject(@className, @exposedName)
 			
@@ -323,12 +481,12 @@ class ClassConverter
 		#Get accessor
 		block.add "//Get Accessor #{name} (#{@nativeType accessor.type})"
 		fn = block.add new CodeBlock.FunctionBlock(snippets.impl.accessorGet @className, name)
-		fn.add (snippets.impl.accessorGetImpl "#{@classType}*", @nativeType(accessor.type), accessor.read)
+		fn.add (snippets.impl.accessorGetImpl "#{@classType.fullType()}*", @nativeType(accessor.type), accessor.read)
 		
 		#Set accessor
 		block.add "//Set Accessor #{name} (#{@nativeType accessor.type})"
 		fn = block.add new CodeBlock.FunctionBlock(snippets.impl.accessorSet @className, name)
-		fn.add (snippets.impl.accessorSetImpl "#{@classType}*", @nativeType(accessor.type), accessor.write)
+		fn.add (snippets.impl.accessorSetImpl "#{@classType.fullType()}*", @nativeType(accessor.type), accessor.write)
 		@logger.stats.accessors++
 		return block
 		
@@ -346,7 +504,6 @@ class ClassConverter
 		nativeType = @nativeType arg.type
 		if arg.type.rawType == 'void' then @warn 'Type #{arg.type.fullType()} used as argument type.'
 		if not arg.value
-			#return "#{nativeType} #{arg.name} = FromJS<#{nativeType}>(args[#{narg}], #{narg});"
 			return "#{nativeType} #{arg.name} = " + snippets.FromJS nativeType, "args[#{narg}]", narg
 		else
 			#value can be:
@@ -361,7 +518,6 @@ class ClassConverter
 					argv = argType.namespace + '::' + argv
 				if argType.wrapped and not arg.type.isPointer
 					argv = '&' + argv
-			#return "#{nativeType} #{arg.name} = Optional<#{nativeType}>(args, #{narg}, #{argv});"
 			return "#{nativeType} #{arg.name} = " + snippets.Optional nativeType, narg, argv
 		
 	#Generates the if clause for a type check used to determine which overload to call
@@ -397,8 +553,10 @@ class ClassConverter
 		@convertArguments block, overload.args
 
 		if !@isStatic && overload.name != "__constructor" 
-			block.add "#{@classType}* _this = " + snippets.FromJS @classType + '*', "args.This()", 0
+			block.add "#{@classType.fullType()}* _this = " + snippets.FromJS @classType.fullType() + '*', "args.This()", 0
 
+		if overload.name == '__postAllocator' && @virtualCount > 0
+			block.add '_this->bea_derived_setInstance(args.This());'
 		
 		#add the C++ sublines 
 		_.each overload.sublines, (line) =>	block.add new CodeBlock.Code line.text
@@ -425,7 +583,7 @@ class ClassConverter
 		#If we are processing a static class, the converted functions aren't part of a C++ class, so we just have to prepend the current namespace to the function call (eg. cv::add())
 		#In case of a class member, we need to convert args.This() to the wrapped type (our class type)
 		#and use the form _this->functionName() to call the member function. Crazy stuff.
-		fnName = overload.name
+		fnName = overload.callAs ? overload.name
 		if @isStatic 
 			fnName = @namespace + '::' + fnName
 		else
@@ -447,11 +605,16 @@ class ClassConverter
 					#Mat* fnRet = new Mat(cols, rows)
 					#Mat* fnRet = new Mat(*src)
 					if overload.name == '__constructor'
-						fncall = new FnCall fnRet, 'new ' + overload.type.fullType(), argList
+						fncall = new FnCall fnRet, 'new ' + @classType.fullType(), argList
 						retVal = "return v8::External::New(fnRetVal);"
 					else
-						tmp = new FnCall '', fnName, argList
-						fncall = new FnCall fnRet, 'new ' + overload.type.fullType(), tmp.render('')
+						#Native function returns a wrapped type. 
+						#if it's not a pointer, make one
+						if not overload.type.isPointer
+							tmp = new FnCall '', fnName, argList
+							fncall = new FnCall fnRet, 'new ' + overload.type.fullType(), tmp.render('')
+						else
+							fncall = new FnCall fnRet, fnName, argList
 
 			#finally, add the block
 			block.add fncall.render()	#function call
@@ -514,7 +677,7 @@ class ClassConverter
 		#add the sublines to the function
 		fnBlock = new CodeBlock.FunctionBlock snippets.impl.destructor(@className, "__destructor")
 		fnBlock.add "DESTRUCTOR_BEGIN();"
-		fnBlock.add "#{@classType}* _this = " + snippets.FromJS @classType + '*', "value", 0
+		fnBlock.add "#{@classType.fullType()}* _this = " + snippets.FromJS @classType.fullType() + '*', "value", 0
 		_.each @destructorNode.children, (line) =>	fnBlock.add new CodeBlock.Code line.text
 		fnBlock.add "DESTRUCTOR_END();"
 		@logger.stats.converted++

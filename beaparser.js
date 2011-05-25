@@ -11,6 +11,9 @@
       this.parent = null;
     }
     BeaNode.prototype.addChild = function(node) {
+      if (typeof node === "string") {
+        node = new BeaNode(node, this.level + 1, this.fileName);
+      }
       node.parent = this;
       this.children.push(node);
       return node;
@@ -83,10 +86,11 @@
       if (!txt.length) {
         return null;
       }
+      txt = txt.replace(/\t/g, ' ');
       node = new BeaNode(txt, level, this.fileName, linenumber + 1);
       if (level === this.curNode.level) {
         this.curNode.parent.addChild(node);
-      } else if (level === this.curNode.level + 1) {
+      } else if (level >= this.curNode.level + 1) {
         this.curNode.addChild(node);
       } else if (level < this.curNode.level) {
         tmp = this.curNode;

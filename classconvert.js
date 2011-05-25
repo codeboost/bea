@@ -40,45 +40,80 @@
       this.namespace = '';
       this.nsBlock = null;
       this.accessors = {};
-      this.hasPostAllocator = false;
       this.destructorNode = null;
       this.typeManager = this.options.typeManager;
       this.logger = this.options.logger;
+      this.virtCount = 0;
+      this.environ = this.options.environ;
+      this.virtualCount = 0;
     }
     ClassConverter.prototype.warn = function(msg, node) {
       this.logger.warn(msg, node);
       return false;
     };
     ClassConverter.prototype.processClass = function(cl, targetNamespace) {
-      var declaNs, derivedDecla, ret, _ref;
+      var cldef, declaNs, derivedDecla, ret;
       this.namespace = cl.namespace;
       if (/^@static\s+/.test(cl.node.text)) {
         this.isStatic = true;
       } else {
         this.isStatic = false;
       }
-      _ref = beautils.parseClassDirective(cl.node), this.className = _ref[0], this.exposedName = _ref[1];
-      this.nativeClassName = this.className;
-      this.className = 'J' + this.nativeClassName;
-      this.classType = (new beautils.Type(this.nativeClassName, this.namespace)).fullType();
-      this.nsBlock = new CodeBlock.NamespaceBlock(targetNamespace);
-      _.each(cl.node.children, __bind(function(child) {
-        return this.processFunNode(child);
-      }, this));
-      if (this.virtual) {
-        derivedDecla = this.createDerivedClass();
-      }
-      this.globalBlock = new CodeBlock.CodeBlock;
-      if (!this.options.manual) {
-        if (!this.isStatic) {
-          this.globalBlock.add("DECLARE_EXPOSED_CLASS(" + this.classType + ");");
-          if (!this.classFns["__constructor"]) {
-            this.warn("No constructor defined for " + this.className + "!", cl.node);
+      cldef = beautils.parseClassDirective(cl.node);
+      this.className = cldef.className;
+      this.exposedName = cldef.exposedName;
+      this.parentClass = cldef.parentClass;
+      if (this.parentClass) {
+        _.each(this.parentClass, __bind(function(parentClass) {
+          var parentFns, parentType;
+          parentType = new beautils.Type(parentClass, this.namespace);
+          parentFns = this.environ[parentType.namespace][parentType.rawType];
+          if (!parentFns) {
+            return this.warn("Unkown base class '" + parentClass + "'", cl.node);
+          } else {
+            _.extend(this.classFns, parentFns.fns);
+            delete this.classFns["__constructor"];
+            delete this.classFns["__destructor"];
+            return this.virtualCount += parentFns.virtualCount;
           }
-        } else {
-          this.globalBlock.add("DECLARE_STATIC(" + targetNamespace + "::" + this.className + ");");
+        }, this));
+      }
+      this.nsBlock = new CodeBlock.NamespaceBlock(targetNamespace);
+      this.nativeClassName = this.className;
+      this.classType = new beautils.Type(this.nativeClassName, this.namespace);
+      this.className = 'J' + this.nativeClassName;
+      if (!this.isStatic) {
+        if (!cl.node.findChild("@postAllocator")) {
+          cl.node.addChild("@postAllocator");
         }
       }
+      _.each(cl.node.children, __bind(function(child) {
+        if (/^public\s*:/.test(child.text)) {
+          return _.each(child.children, __bind(function(chld) {
+            return this.processFunNode(chld);
+          }, this));
+        } else if (/^private\s*:|^protected\s*:/.test(child.text)) {
+          return this.warn('Private and protected members ignored.', child);
+        } else {
+          return this.processFunNode(child);
+        }
+      }, this));
+      if (!this.environ[this.namespace]) {
+        this.environ[this.namespace] = {};
+      }
+      this.environ[this.namespace][this.nativeClassName] = {
+        fns: this.classFns,
+        virtualCount: this.virtualCount
+      };
+      if (this.virtualCount > 0) {
+        this.baseType = this.classType;
+        this.nativeClassName = this.options.derivedPrefix + this.nativeClassName;
+        this.classType = new beautils.Type(this.nativeClassName, targetNamespace);
+      }
+      if (!this.isStatic) {
+        this.options.typeManager.addWrapped(this.classType, this.baseType);
+      }
+      this.globalBlock = new CodeBlock.CodeBlock;
       if (!this.options.manual && this.destructorNode) {
         this.nsBlock.add(this.createDestructor());
       }
@@ -100,6 +135,21 @@
       if (!this.options.manual) {
         declaNs = new CodeBlock.NamespaceBlock(targetNamespace);
         declaNs.add(this.createDeclaration());
+        if (this.virtualCount > 0) {
+          derivedDecla = this.createDerivedClass();
+          declaNs.add(derivedDecla.decla);
+          this.nsBlock.add(derivedDecla.impl);
+        }
+      }
+      if (!this.options.manual) {
+        if (!this.isStatic) {
+          this.globalBlock.add("DECLARE_EXPOSED_CLASS(" + (this.classType.fullType()) + ");");
+          if (!this.classFns["__constructor"]) {
+            this.warn("No constructor defined for " + this.className + "!", cl.node);
+          }
+        } else {
+          this.globalBlock.add("DECLARE_STATIC(" + targetNamespace + "::" + this.className + ");");
+        }
       }
       ret = {
         global: this.globalBlock,
@@ -112,34 +162,64 @@
       return ret;
     };
     ClassConverter.prototype.processFunNode = function(node) {
-      var callNode, fn, isManual, isPostAllocator, nodeText, str;
+      var accType, callNode, fn, fspace, isManual, nodeText, str, _accName;
+      if (/^\/\//.test(node.text)) {
+        return false;
+      }
       if (/^@noexpose/.test(node.text)) {
         this.exposed = false;
         return false;
       }
-      isManual = /^@manual\s+/.test(node.text);
-      if (isManual) {
-        str = node.text.substring(7);
+      if (/^@manual\s+/.test(node.text)) {
+        isManual = true;
+        str = node.text.replace(/^@manual\s+/, '');
       } else {
         str = node.text;
       }
-      if (/^\@accessor\s+/.test(node.text)) {
+      str = str.replace(/\s*\/\/.*$/g, '');
+      if (/^\@accessor\s+/.test(str)) {
         return this.parseAccessor(node);
       }
-      isPostAllocator = false;
-      if (/^\@postAllocator/.test(node.text)) {
+      if (/^\@postAllocator/.test(str)) {
         if (this.isStatic) {
-          return this.warn("Postallocator for static class ignored");
+          return this.warn("Postallocator for static class ignored", node);
         }
         str = "void __postAllocator()";
-        this.hasPostAllocator = true;
       }
-      if (/^\@destructor/.test(node.text)) {
+      if (/^~|^virtual\s+~/.test(str)) {
+        return false;
+      }
+      if (/^\@destructor/.test(str)) {
         if (this.isStatic) {
-          return this.warn("Destructor for static class ignored");
+          return this.warn("Destructor for static class ignored", node);
         }
         this.destructorNode = node;
         return true;
+      }
+      str = str.replace(/;\s*$/, '');
+      if (str.indexOf("(") === -1 && /\s+/.test(str)) {
+        str = str.replace(/\s+/g, ' ');
+        fspace = str.indexOf(' ');
+        accType = str.slice(0, fspace);
+        _accName = str.slice(fspace);
+        _.each(_accName.split(','), __bind(function(accName) {
+          var accessor;
+          accName = beautils.trim(accName);
+          if (!accName.length) {
+            return false;
+          }
+          accessor = {
+            type: new beautils.Type(accType, this.namespace),
+            name: accName,
+            read: "_this->" + accName,
+            write: "_this->" + accName + " = _accValue;"
+          };
+          return this.addAccessor(accessor, node);
+        }, this));
+        return true;
+      }
+      if (/\s+operator\s*[=\+\/\\\*<>\^\-]*/.test(str)) {
+        return this.warn('Operator overloading not supported. Declaration ignored', node);
       }
       fn = beautils.parseDeclaration(str, this.namespace);
       if (!fn) {
@@ -157,8 +237,9 @@
       fn.requiredArgs = this.requiredArgs(fn.args);
       fn.sublines = node.children;
       fn.node = node;
+      fn.parentClass = this.nativeClassName;
       if (fn.virtual) {
-        this.virtual = true;
+        this.virtualCount++;
       }
       callNode = _.detect(fn.sublines, function(subline) {
         return /^\@call/.test(subline.text);
@@ -179,6 +260,12 @@
       }
       return true;
     };
+    ClassConverter.prototype.addAccessor = function(accessor, node) {
+      if (this.accessors[accessor.name]) {
+        return this.warn("Accessor: '" + accessor.name + "': accessor already defined. Second definition ignored", node);
+      }
+      return this.accessors[accessor.name] = accessor;
+    };
     ClassConverter.prototype.parseAccessor = function(node) {
       var accessor, parts, read, write, _ref, _ref2;
       parts = node.text.match(/^\@accessor\s+(\w+)\s+(\w+)/);
@@ -189,9 +276,6 @@
         name: parts[1],
         type: parts[2]
       };
-      if (this.accessors[accessor.name]) {
-        return this.warn("Accessor: '" + accessor.name + "': accessor already defined. Second definition ignored", node);
-      }
       if (!accessor.type) {
         accessor.type = 'int';
         this.warn("Accessor '" + accessor.name + "' : type not defined, int assumed", node);
@@ -208,7 +292,7 @@
       accessor.read = (_ref = read != null ? read.text.replace(/^@get\s*/, '') : void 0) != null ? _ref : "";
       accessor.write = (_ref2 = write != null ? write.text.replace(/^@set\s*/, '') : void 0) != null ? _ref2 : "";
       accessor.node = node;
-      return this.accessors[accessor.name] = accessor;
+      return this.addAccessor(accessor);
     };
     ClassConverter.prototype.createDeclaration = function() {
       var block, decBlock;
@@ -243,38 +327,89 @@
       return decBlock;
     };
     ClassConverter.prototype.createDerivedClass = function() {
-      var classBlock, constructors, public, vfuncs;
-      classBlock = new CodeBlock.ClassBlock("class bea_" + this.classType + " : public " + this.classType + ", public bea::DerivedClass");
+      var classBlock, constructors, implBlock, public, publicd, publicv, vfuncs;
+      classBlock = new CodeBlock.ClassBlock("class " + this.nativeClassName + " : public " + (this.baseType.fullType()) + ", public bea::DerivedClass");
       public = classBlock.add(new CodeBlock.CodeBlock("public:", false));
       constructors = _.detect(this.classFns, function(fn) {
         return fn.name === '__constructor';
       });
-      _.each(constructors, function(constr) {
+      _.each(constructors, __bind(function(constr) {
         var cargs, dargs;
-        dargs = _.map(constr.args, arg(arg.org));
-        cargs = _.map(constr.args, arg(arg.name));
-        return public.add("bea_" + this.classType + "(" + (dargs.join(', ')) + ") : " + this.classType + "(" + (cargs.join(', ')) + "){}");
+        dargs = _.map(constr.args, function(arg) {
+          return arg.org;
+        });
+        cargs = _.map(constr.args, function(arg) {
+          return arg.name;
+        });
+        return public.add("" + this.nativeClassName + "(" + (dargs.join(', ')) + ") : " + (this.baseType.fullType()) + "(" + (cargs.join(', ')) + "){}");
+      }, this));
+      vfuncs = [];
+      _.each(this.classFns, function(fn) {
+        return _.each(fn, function(over) {
+          if (over.virtual) {
+            return vfuncs.push(over);
+          }
+        });
       });
-      vfuncs = _.select(this.classFns, function(fn) {
-        return fn.virtual;
-      });
-      public.add("//Virtual functions");
-      return _.each(vfuncs, function(vfunc) {
-        var cargs, dargs, ret;
-        dargs = _.map(vfunc.args, arg(arg.org));
-        cargs = _.map(vfun.args, arg(arg.name));
+      implBlock = new CodeBlock.CodeBlock;
+      publicv = public.add(new CodeBlock.CodeBlock("", false));
+      publicv.add("//JS: These virtual functions will only be called from Javascript");
+      publicd = public.add(new CodeBlock.CodeBlock("", false));
+      publicd.add("//Native: These virtual functions will only be called from native code");
+      _.each(vfuncs, __bind(function(vfunc) {
+        var arglist, cargs, castBack, cif, dargs, fn, funcontents, nativeType, ret, vfuncdecla;
+        dargs = _.map(vfunc.args, function(arg) {
+          return arg.org;
+        });
+        cargs = _.map(vfunc.args, function(arg) {
+          return arg.name;
+        });
+        vfunc.callAs = "_d_" + vfunc.name;
         ret = 'return';
         if (vfunc.type.rawType === 'void') {
           ret = '';
         }
-        return public.add("inline " + (vfunc.type.fullType()) + " bea_" + vfunc.name + "(" + (dargs.join(', ')) + "){" + ret + " " + this.classType + "::" + vfunc.name + "(" + (cargs.join(', ')) + ");}");
-      });
+        if (vfunc.pure) {
+          funcontents = "throw bea::Exception(\"'" + vfunc.name + "' : pure virtual function not defined.\");";
+        } else {
+          funcontents = "" + ret + " " + (this.baseType.fullType()) + "::" + vfunc.name + "(" + (cargs.join(', ')) + ");";
+        }
+        publicv.add(new CodeBlock.FunctionBlock("inline " + vfunc.type.org + " _d_" + vfunc.name + "(" + (dargs.join(', ')) + ")")).add(funcontents);
+        vfuncdecla = "" + vfunc.type.org + " " + vfunc.name + "(" + (dargs.join(', ')) + ")";
+        publicd.add(vfuncdecla + ';');
+        fn = implBlock.add(new CodeBlock.FunctionBlock("" + vfunc.type.org + " " + this.nativeClassName + "::" + vfunc.name + "(" + (dargs.join(', ')) + ")"));
+        fn.add("v8::HandleScope v8scope; v8::Handle<v8::Value> v8retVal;");
+        cif = fn.add(new CodeBlock.CodeBlock("if (bea_derived_hasOverride(\"" + vfunc.name + "\"))"));
+        arglist = _.map(vfunc.args, __bind(function(arg) {
+          return snippets.ToJS(arg.type.org, arg.name, '');
+        }, this));
+        if (vfunc.args.length > 0) {
+          cif.add("v8::Handle<v8::Value> v8args[" + vfunc.args.length + "] = {" + (arglist.join(', ')) + "};");
+        } else {
+          cif.add("v8::Handle<v8::Value> v8args[1];");
+        }
+        cif.add("v8retVal = bea_derived_callJS(\"" + vfunc.name + "\", " + vfunc.args.length + ", v8args);");
+        fn.add("if (v8retVal.IsEmpty()) " + ret + " _d_" + vfunc.name + "(" + (cargs.join(', ')) + ");");
+        if (vfunc.type.rawType !== 'void') {
+          nativeType = this.nativeType(vfunc.type);
+          if (nativeType.indexOf('*') !== -1 && !vfunc.type.isPointer) {
+            castBack = '*';
+          } else {
+            castBack = '';
+          }
+          return fn.add(("return " + castBack) + snippets.FromJS(nativeType, "v8retVal", 0));
+        }
+      }, this));
+      return {
+        decla: classBlock,
+        impl: implBlock
+      };
     };
     ClassConverter.prototype.createInitFn = function() {
       var initFn;
       initFn = new CodeBlock.FunctionBlock(snippets.decl.InitJSObject(this.className));
       if (!this.isStatic) {
-        initFn.add(snippets.impl.exposeClass(this.classType, this.exposedName));
+        initFn.add(snippets.impl.exposeClass(this.classType.fullType(), this.exposedName));
       } else {
         initFn.add(snippets.impl.exposeObject(this.className, this.exposedName));
       }
@@ -324,10 +459,10 @@
       }
       block.add("//Get Accessor " + name + " (" + (this.nativeType(accessor.type)) + ")");
       fn = block.add(new CodeBlock.FunctionBlock(snippets.impl.accessorGet(this.className, name)));
-      fn.add(snippets.impl.accessorGetImpl("" + this.classType + "*", this.nativeType(accessor.type), accessor.read));
+      fn.add(snippets.impl.accessorGetImpl("" + (this.classType.fullType()) + "*", this.nativeType(accessor.type), accessor.read));
       block.add("//Set Accessor " + name + " (" + (this.nativeType(accessor.type)) + ")");
       fn = block.add(new CodeBlock.FunctionBlock(snippets.impl.accessorSet(this.className, name)));
-      fn.add(snippets.impl.accessorSetImpl("" + this.classType + "*", this.nativeType(accessor.type), accessor.write));
+      fn.add(snippets.impl.accessorSetImpl("" + (this.classType.fullType()) + "*", this.nativeType(accessor.type), accessor.write));
       this.logger.stats.accessors++;
       return block;
     };
@@ -382,7 +517,7 @@
       }, this));
     };
     ClassConverter.prototype.createCall = function(block, overload) {
-      var argList, fnName, fnRet, fncall, names, nativeType, retVal, tmp, _ref;
+      var argList, fnName, fnRet, fncall, names, nativeType, retVal, tmp, _ref, _ref2;
       if (overload.manual) {
         block.add('//TODO: Enter code here');
         block.add('return args.This();');
@@ -390,7 +525,10 @@
       }
       this.convertArguments(block, overload.args);
       if (!this.isStatic && overload.name !== "__constructor") {
-        block.add(("" + this.classType + "* _this = ") + snippets.FromJS(this.classType + '*', "args.This()", 0));
+        block.add(("" + (this.classType.fullType()) + "* _this = ") + snippets.FromJS(this.classType.fullType() + '*', "args.This()", 0));
+      }
+      if (overload.name === '__postAllocator' && this.virtualCount > 0) {
+        block.add('_this->bea_derived_setInstance(args.This());');
       }
       _.each(overload.sublines, __bind(function(line) {
         return block.add(new CodeBlock.Code(line.text));
@@ -414,7 +552,7 @@
         fnRet = nativeType + ' fnRetVal';
         retVal = "return " + snippets.ToJS(nativeType, "fnRetVal");
       }
-      fnName = overload.name;
+      fnName = (_ref = overload.callAs) != null ? _ref : overload.name;
       if (this.isStatic) {
         fnName = this.namespace + '::' + fnName;
       } else {
@@ -425,18 +563,22 @@
         }
       }
       if (fnName.length) {
-        if ((_ref = overload.callText) != null ? _ref.length : void 0) {
+        if ((_ref2 = overload.callText) != null ? _ref2.length : void 0) {
           fncall = new CodeBlock.CodeBlock(overload.callText, false);
         } else {
           if (!this.typeManager.isWrapped(overload.type)) {
             fncall = new FnCall(fnRet, fnName, argList);
           } else {
             if (overload.name === '__constructor') {
-              fncall = new FnCall(fnRet, 'new ' + overload.type.fullType(), argList);
+              fncall = new FnCall(fnRet, 'new ' + this.classType.fullType(), argList);
               retVal = "return v8::External::New(fnRetVal);";
             } else {
-              tmp = new FnCall('', fnName, argList);
-              fncall = new FnCall(fnRet, 'new ' + overload.type.fullType(), tmp.render(''));
+              if (!overload.type.isPointer) {
+                tmp = new FnCall('', fnName, argList);
+                fncall = new FnCall(fnRet, 'new ' + overload.type.fullType(), tmp.render(''));
+              } else {
+                fncall = new FnCall(fnRet, fnName, argList);
+              }
             }
           }
         }
@@ -502,7 +644,7 @@
       var fnBlock;
       fnBlock = new CodeBlock.FunctionBlock(snippets.impl.destructor(this.className, "__destructor"));
       fnBlock.add("DESTRUCTOR_BEGIN();");
-      fnBlock.add(("" + this.classType + "* _this = ") + snippets.FromJS(this.classType + '*', "value", 0));
+      fnBlock.add(("" + (this.classType.fullType()) + "* _this = ") + snippets.FromJS(this.classType.fullType() + '*', "value", 0));
       _.each(this.destructorNode.children, __bind(function(line) {
         return fnBlock.add(new CodeBlock.Code(line.text));
       }, this));

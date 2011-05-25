@@ -10,17 +10,40 @@ class TypeManager
 		@types = []
 		
 	#add a 'wrapped' or exposed class to the list
-	addWrapped: (node, namespace) ->
-		[type] = beautils.parseClassDirective node
-		t = new beautils.Type type, namespace
-		t.wrapped = true
-		t.manual = false
-		@types.push t
+	addWrapped: (type, baseType) ->
+		type.wrapped = true
+		type.manual = false
+		
+		if not @isWrapped type then @types.push type
+		
+		if baseType
+			#tmp = @findWrapped baseType
+			#make sure it doesn't already exists in the list 
+			#possibly added by the pre-parse step
+			@types.push baseType 
+			#if tmp then baseType = tmp else 
+			baseType.alias = type.fullType()
+			baseType.manual = false
+			baseType.wrapped = true
+			
+	
+	#parse class node and create a 'wrapped' type from the declaraiton
+	addClassNode: (classNode, namespace) ->
+		cl = beautils.parseClassDirective classNode
+		cltype = new beautils.Type cl.className, namespace
+		cltype.wrapped = true
+		cltype.manual = false
+		if not @findWrapped cltype then @types.push cltype
+		
 		
 	#Check if a type is 'Wrapped', eg. is an exposed class
 	isWrapped: (type) ->
 		wrapped = _.filter @types, (t) -> t.wrapped
 		_.any wrapped, (wt) -> wt.rawType == type.rawType && wt.namespace == type.namespace
+		
+	findWrapped: (type) ->
+		wrapped = _.filter @types, (t) -> t.wrapped
+		_.detect wrapped, (wt) -> wt.rawType == type.rawType && wt.namespace == type.namespace
 		
 		
 	#Check if a type is native or is in the list of declared types
@@ -81,7 +104,9 @@ class TypeManager
 		if type.alias then return []
 		members = []
 		if not type.manual 
-			members = _.map typeNode.children, (line) -> new beautils.Argument line.text, namespace
+			children = _.select typeNode.children, (n) -> not /^\s*\/\//.test n.text #without the comments
+			
+			members = _.map children, (line) -> new beautils.Argument line.text.replace(';', '').replace(/\/\/.*$/,''), namespace
 		else
 			members = _.map typeNode.children, (line) -> line.text
 		return members
@@ -94,7 +119,10 @@ class TypeManager
 		
 		#Wrapped type -> forward to ExposedClass<T>::Is()
 		if type.wrapped
-			fnBlock.add "return bea::ExposedClass<#{fixt type.fullType()}>::Is(v);"
+			if not type.alias 
+				fnBlock.add "return bea::ExposedClass<#{fixt type.fullType()}>::Is(v);"
+			else
+				fnBlock.add "return " + snippets.Is type.alias + '*', 'v'
 			return fnBlock
 
 		#alias, eg. type Double is double -> return Is<alias>(v). Compiler should recursively detect the right type
@@ -119,12 +147,14 @@ class TypeManager
 		
 		fnBlock = new CodeBlock.CodeBlock
 		if type.wrapped
-			fnBlock.add "return bea::ExposedClass<#{fixt type.fullType()}>::FromJS(v, nArg);"
+			if not type.alias
+				fnBlock.add "return bea::ExposedClass<#{fixt type.fullType()}>::FromJS(v, nArg);"
+			else
+				fnBlock.add "return " + snippets.FromJS type.alias + '*', 'v', 'nArg'
 			return fnBlock
 		
 		if type.alias 
 			#type Double alias double -> return (Double)FromJS<double>(v, nArg);
-			
 			fnBlock.add "return (#{type.fullType()})" + snippets.FromJS(type.alias, 'v', 'nArg')
 			return fnBlock
 
@@ -148,10 +178,19 @@ class TypeManager
 	
 	#Create to ToJS<T> function
 	fnToJS: (type) ->
+	
+		#return false unless !type.noToJS
 		fnBlock = new CodeBlock.CodeBlock
 		
 		if type.wrapped
-			fnBlock.add "return bea::ExposedClass<#{fixt type.fullType()}>::ToJS(v);"
+			if not type.alias
+				fnBlock.add "return bea::ExposedClass<#{fixt type.fullType()}>::ToJS(v);"
+			else
+				fnBlock.add "return " + snippets.ToJS type.alias + '*', "static_cast<#{fixt type.alias}*>(v)"
+			return fnBlock
+			
+		if type.alias
+			fnBlock.add "return " + snippets.ToJS type.alias, "v"
 			return fnBlock
 		
 		fnBlock.add "v8::HandleScope scope;"

@@ -107,13 +107,9 @@
     if (argsStart === -1 || argsEnd === -1) {
       return false;
     }
-    args = str.slice(argsStart + 1, argsEnd);
-    decla = str.slice(0, argsStart);
-    isPure = false;
-    if (/\s*=\s*0/.test(decla)) {
-      isPure = true;
-      decla = decla.replace(/\s*=\s*0;*/, '');
-    }
+    args = trim(str.slice(argsStart + 1, argsEnd));
+    decla = trim(str.slice(0, argsStart));
+    isPure = /\s*=\s*0/.test(str);
     parseArgs = function(args) {
       var char, cur, paran, ret, symbol, _i, _len;
       if (args.length === 0) {
@@ -179,12 +175,24 @@
     });
   };
   parseClassDirective = function(node) {
-    var className, exposedName, tmp, _ref;
-    className = (node.text.replace(/^\s*@class\s+|^\s*@static\s+/, '')).replace(/\'|\"/g, '');
+    var className, derived, exposedName, ret, tmp, _derived, _ref, _ref2;
+    className = node.text.replace(/{\s*$/, '');
+    className = (className.replace(/^\s*@class\s+|^\s*@static\s+/, '')).replace(/\'|\"/g, '');
+    _ref = className.split(' : '), className = _ref[0], _derived = _ref[1];
+    if (_derived) {
+      derived = _.map(_derived.split(','), function(derived) {
+        return derived.replace(/\s*public\s+/, '').replace(/^\s+|\s+$/, '');
+      });
+    }
     tmp = className.split(' ');
     className = tmp[0];
-    exposedName = ((_ref = tmp[1]) != null ? _ref : className).replace(/\s+/g, '_');
-    return [className, exposedName];
+    exposedName = ((_ref2 = tmp[1]) != null ? _ref2 : className).replace(/\s+/g, '_');
+    ret = {
+      className: className,
+      exposedName: exposedName,
+      parentClass: derived
+    };
+    return ret;
   };
   exports.u = {
     parseArg: parseArg,
