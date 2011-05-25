@@ -152,8 +152,13 @@ parseDeclaration = (str, namespace) ->
 		decla = decla.replace /^virtual\s+/, ''
 		isVirtual = true
 	
+	isStatic = false
+	if /^static\s+/.test decla
+		decla = decla.replace /^static\s+/, ''
+		isStatic = true
+	
 	fnDec = new Argument decla, namespace
-	_.extend fnDec, {args: fnArgs, virtual: isVirtual, pure: isPure}		
+	_.extend fnDec, {args: fnArgs, virtual: isVirtual, pure: isPure, static: isStatic}		
 
 isSameOverload = (overload1, overload2) ->
 	overload1.name == overload2.name &&

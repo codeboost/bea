@@ -11,45 +11,27 @@
       this.namespaces = namespaces;
       this.types = [];
     }
-    TypeManager.prototype.addWrapped = function(type, baseType) {
+    TypeManager.prototype.addClassType = function(type) {
       type.wrapped = true;
       type.manual = false;
-      if (!this.isWrapped(type)) {
-        this.types.push(type);
-      }
-      if (baseType) {
-        this.types.push(baseType);
-        baseType.alias = type.fullType();
-        baseType.manual = false;
-        return baseType.wrapped = true;
-      }
+      this.dropType(type);
+      return this.types.push(type);
     };
     TypeManager.prototype.addClassNode = function(classNode, namespace) {
       var cl, cltype;
       cl = beautils.parseClassDirective(classNode);
       cltype = new beautils.Type(cl.className, namespace);
-      cltype.wrapped = true;
-      cltype.manual = false;
-      if (!this.findWrapped(cltype)) {
-        return this.types.push(cltype);
-      }
+      return this.addClassType(cltype);
+    };
+    TypeManager.prototype.dropType = function(type) {
+      this.types = _.reject(this.types, function(t) {
+        return t.wrapped === type.wrapped && t.rawType === type.rawType && t.namespace === type.namespace;
+      });
+      return this.types;
     };
     TypeManager.prototype.isWrapped = function(type) {
-      var wrapped;
-      wrapped = _.filter(this.types, function(t) {
-        return t.wrapped;
-      });
-      return _.any(wrapped, function(wt) {
-        return wt.rawType === type.rawType && wt.namespace === type.namespace;
-      });
-    };
-    TypeManager.prototype.findWrapped = function(type) {
-      var wrapped;
-      wrapped = _.filter(this.types, function(t) {
-        return t.wrapped;
-      });
-      return _.detect(wrapped, function(wt) {
-        return wt.rawType === type.rawType && wt.namespace === type.namespace;
+      return _.any(this.types, function(wt) {
+        return wt.wrapped && wt.rawType === type.rawType && wt.namespace === type.namespace;
       });
     };
     TypeManager.prototype.knownType = function(type) {

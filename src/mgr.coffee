@@ -8,43 +8,34 @@ fixt = snippets.fixt
 class TypeManager 
 	constructor: (@logger, @namespaces) ->
 		@types = []
-		
-	#add a 'wrapped' or exposed class to the list
-	addWrapped: (type, baseType) ->
+	#adds a type which represents an exposed class: I call them 'wrapped' types
+	#These types will have different conversions generated (basically, returning from bea::ExposedClass<Type>)
+	addClassType: (type) ->
 		type.wrapped = true
 		type.manual = false
+		@dropType(type)
+		@types.push type
 		
-		if not @isWrapped type then @types.push type
-		
-		if baseType
-			#tmp = @findWrapped baseType
-			#make sure it doesn't already exists in the list 
-			#possibly added by the pre-parse step
-			@types.push baseType 
-			#if tmp then baseType = tmp else 
-			baseType.alias = type.fullType()
-			baseType.manual = false
-			baseType.wrapped = true
-			
-	
 	#parse class node and create a 'wrapped' type from the declaraiton
 	addClassNode: (classNode, namespace) ->
 		cl = beautils.parseClassDirective classNode
 		cltype = new beautils.Type cl.className, namespace
-		cltype.wrapped = true
-		cltype.manual = false
-		if not @findWrapped cltype then @types.push cltype
+		@addClassType cltype
 		
-		
+	
+	dropType: (type) ->
+		@types = _.reject @types, (t) ->
+			t.wrapped == type.wrapped && 
+			t.rawType == type.rawType &&
+			t.namespace == type.namespace
+		@types
+	
 	#Check if a type is 'Wrapped', eg. is an exposed class
 	isWrapped: (type) ->
-		wrapped = _.filter @types, (t) -> t.wrapped
-		_.any wrapped, (wt) -> wt.rawType == type.rawType && wt.namespace == type.namespace
-		
-	findWrapped: (type) ->
-		wrapped = _.filter @types, (t) -> t.wrapped
-		_.detect wrapped, (wt) -> wt.rawType == type.rawType && wt.namespace == type.namespace
-		
+		_.any @types, (wt) -> 
+			wt.wrapped && 
+			wt.rawType == type.rawType && 
+			wt.namespace == type.namespace
 		
 	#Check if a type is native or is in the list of declared types
 	knownType: (type) -> 

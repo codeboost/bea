@@ -114,4 +114,9 @@
     struct.ToJS = struct.add(new CodeBlock.FunctionBlock("static v8::Handle<v8::Value> ToJS(" + (fixt(type)) + " const& v)"));
     return struct;
   };
+  exports.FromJSPointer = function(type, name, v, i) {
+    var vtype;
+    vtype = "std::vector<" + (fixt(type)) + ">";
+    return ("" + vtype + " v_" + name + " = ") + exports.FromJS(vtype, v, i);
+  };
 }).call(this);

@@ -108,10 +108,12 @@ class ClassConverter
 
 			
 		if not @isStatic
-			@options.typeManager.addWrapped @classType, @baseType
-		
-
-		
+			@options.typeManager.addClassType @classType
+			if @baseType
+				@baseType.alias = @classType.fullType()	#means return from this type
+				@options.typeManager.addClassType @baseType
+			
+			
 		@globalBlock = new CodeBlock.CodeBlock
 		
 		#produce destructor
@@ -502,9 +504,18 @@ class ClassConverter
 	#Create conversion code for a function argument
 	convertArg: (arg, narg) ->
 		nativeType = @nativeType arg.type
-		if arg.type.rawType == 'void' then @warn 'Type #{arg.type.fullType()} used as argument type.'
+		
+		if arg.type.rawType == 'void' 
+			@warn "Type #{arg.type.fullType()} used as argument type."
+			return ""
+			
 		if not arg.value
-			return "#{nativeType} #{arg.name} = " + snippets.FromJS nativeType, "args[#{narg}]", narg
+			if 0 && arg.type.isPointer && !@typeManager.isWrapped arg.type && arg.type.isConst
+				ret = snippets.FromJSPointer nativeType, arg.name, "args[#{narg}]", narg
+				arg.name = "&v_" + arg.name + "[0]"
+				return ret
+			else
+				return "#{nativeType} #{arg.name} = " + snippets.FromJS nativeType, "args[#{narg}]", narg
 		else
 			#value can be:
 			#someArg = integer
@@ -551,8 +562,10 @@ class ClassConverter
 			return block
 	
 		@convertArguments block, overload.args
+		
+		isStatic = overload.static | @isStatic
 
-		if !@isStatic && overload.name != "__constructor" 
+		if !isStatic && overload.name != "__constructor" 
 			block.add "#{@classType.fullType()}* _this = " + snippets.FromJS @classType.fullType() + '*', "args.This()", 0
 
 		if overload.name == '__postAllocator' && @virtualCount > 0
@@ -586,6 +599,8 @@ class ClassConverter
 		fnName = overload.callAs ? overload.name
 		if @isStatic 
 			fnName = @namespace + '::' + fnName
+		else if overload.static
+			fnName = @nativeClassName + '::' + fnName
 		else
 			if overload.name == '__postAllocator'
 				fnName = ''

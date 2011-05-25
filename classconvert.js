@@ -111,7 +111,11 @@
         this.classType = new beautils.Type(this.nativeClassName, targetNamespace);
       }
       if (!this.isStatic) {
-        this.options.typeManager.addWrapped(this.classType, this.baseType);
+        this.options.typeManager.addClassType(this.classType);
+        if (this.baseType) {
+          this.baseType.alias = this.classType.fullType();
+          this.options.typeManager.addClassType(this.baseType);
+        }
       }
       this.globalBlock = new CodeBlock.CodeBlock;
       if (!this.options.manual && this.destructorNode) {
@@ -475,13 +479,20 @@
       return nativeType;
     };
     ClassConverter.prototype.convertArg = function(arg, narg) {
-      var argType, argv, nativeType;
+      var argType, argv, nativeType, ret;
       nativeType = this.nativeType(arg.type);
       if (arg.type.rawType === 'void') {
-        this.warn('Type #{arg.type.fullType()} used as argument type.');
+        this.warn("Type " + (arg.type.fullType()) + " used as argument type.");
+        return "";
       }
       if (!arg.value) {
-        return ("" + nativeType + " " + arg.name + " = ") + snippets.FromJS(nativeType, "args[" + narg + "]", narg);
+        if (0 && arg.type.isPointer && !this.typeManager.isWrapped(arg.type && arg.type.isConst)) {
+          ret = snippets.FromJSPointer(nativeType, arg.name, "args[" + narg + "]", narg);
+          arg.name = "&v_" + arg.name + "[0]";
+          return ret;
+        } else {
+          return ("" + nativeType + " " + arg.name + " = ") + snippets.FromJS(nativeType, "args[" + narg + "]", narg);
+        }
       } else {
         argv = arg.value;
         argType = this.typeManager.typeFromValue(argv);
@@ -517,14 +528,15 @@
       }, this));
     };
     ClassConverter.prototype.createCall = function(block, overload) {
-      var argList, fnName, fnRet, fncall, names, nativeType, retVal, tmp, _ref, _ref2;
+      var argList, fnName, fnRet, fncall, isStatic, names, nativeType, retVal, tmp, _ref, _ref2;
       if (overload.manual) {
         block.add('//TODO: Enter code here');
         block.add('return args.This();');
         return block;
       }
       this.convertArguments(block, overload.args);
-      if (!this.isStatic && overload.name !== "__constructor") {
+      isStatic = overload.static | this.isStatic;
+      if (!isStatic && overload.name !== "__constructor") {
         block.add(("" + (this.classType.fullType()) + "* _this = ") + snippets.FromJS(this.classType.fullType() + '*', "args.This()", 0));
       }
       if (overload.name === '__postAllocator' && this.virtualCount > 0) {
@@ -555,6 +567,8 @@
       fnName = (_ref = overload.callAs) != null ? _ref : overload.name;
       if (this.isStatic) {
         fnName = this.namespace + '::' + fnName;
+      } else if (overload.static) {
+        fnName = this.nativeClassName + '::' + fnName;
       } else {
         if (overload.name === '__postAllocator') {
           fnName = '';

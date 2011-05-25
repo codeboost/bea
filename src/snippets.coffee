@@ -102,5 +102,7 @@ exports.ConvertStruct = (type) ->
 	struct.FromJS = struct.add new CodeBlock.FunctionBlock "static #{type} FromJS(v8::Handle<v8::Value> v, int nArg)"
 	struct.ToJS = 	struct.add new CodeBlock.FunctionBlock "static v8::Handle<v8::Value> ToJS(#{fixt type} const& v)"
 	return struct
-	
-	
+
+exports.FromJSPointer = (type, name, v, i) ->
+	vtype = "std::vector<#{fixt type}>"
+	"#{vtype} v_#{name} = " + exports.FromJS vtype, v, i
