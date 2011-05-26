@@ -114,9 +114,23 @@
     struct.ToJS = struct.add(new CodeBlock.FunctionBlock("static v8::Handle<v8::Value> ToJS(" + (fixt(type)) + " const& v)"));
     return struct;
   };
-  exports.FromJSPointer = function(type, name, v, i) {
+  exports.FromJSCast = function(castName, type, name, v, i) {
     var vtype;
-    vtype = "std::vector<" + (fixt(type)) + ">";
-    return ("" + vtype + " v_" + name + " = ") + exports.FromJS(vtype, v, i);
+    if (castName.indexOf("<>") === -1) {
+      vtype = castName;
+    } else {
+      castName = castName.replace(/<|>/g, '');
+      vtype = "" + castName + "<" + (fixt(type)) + ">";
+    }
+    return ("" + vtype + " " + name + " = ") + exports.FromJS(vtype, v, i);
+  };
+  exports.FromJSCastOptional = function(castName, type, name, v, i, argv) {
+    var vtype;
+    if (castName.indexOf("<") === -1) {
+      vtype = castName;
+    } else {
+      vtype = "" + castName + "<" + (fixt(type)) + ">";
+    }
+    return ("" + vtype + " " + name + " = ") + exports.Optional(vtype, v, i, argv);
   };
 }).call(this);

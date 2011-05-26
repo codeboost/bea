@@ -65,9 +65,8 @@ class RecursiveParser
 		return root
 		
 class MessageLogger
-	constructor: ->
-		@warnings = 0
-
+	@warnings: 0
+	
 	warn: (msg, node) ->
 		[fileName, line] = [(node?.fileName) ? "", (node?.line) ? 0]
 		console.log "#{fileName}(#{line}): warning: #{msg}"
@@ -119,6 +118,7 @@ class BeaLoader extends MessageLogger
 			constants: 0 	#number of constants declared
 			typesConverted: 0		#number of types converted
 			typesIgnored: 0	#number of types not converted
+			warnings: 0
 			
 	filenameFromNode: (node) ->
 		filename = node.text.replace /^@\w+\s*=?\s*/, ''	#remove node type
@@ -342,6 +342,8 @@ class BeaLoader extends MessageLogger
 				return @convertManual()
 			else
 				return @convertFull()
+				
+			@stats.warnings = @warnings
 		#catch e
 		#	@error "Exception: " + e
 			

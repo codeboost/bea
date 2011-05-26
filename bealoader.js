@@ -83,9 +83,8 @@
     return RecursiveParser;
   })();
   MessageLogger = (function() {
-    function MessageLogger() {
-      this.warnings = 0;
-    }
+    function MessageLogger() {}
+    MessageLogger.warnings = 0;
     MessageLogger.prototype.warn = function(msg, node) {
       var fileName, line, _ref, _ref2, _ref3;
       _ref3 = [(_ref = (node != null ? node.fileName : void 0)) != null ? _ref : "", (_ref2 = (node != null ? node.line : void 0)) != null ? _ref2 : 0], fileName = _ref3[0], line = _ref3[1];
@@ -142,7 +141,8 @@
         failed: 0,
         constants: 0,
         typesConverted: 0,
-        typesIgnored: 0
+        typesIgnored: 0,
+        warnings: 0
       };
     }
     BeaLoader.prototype.filenameFromNode = function(node) {
@@ -380,6 +380,7 @@
       } else {
         return this.convertFull();
       }
+      return this.stats.warnings = this.warnings;
     };
     BeaLoader.prototype.load = function(fileName) {
       var parser, root;

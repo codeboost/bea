@@ -267,9 +267,11 @@ class ClassConverter
 		
 		
 		if @classFns[fn.name]
-			if not beautils.hasOverload @classFns[fn.name], fn
+			existing = beautils.findOverload @classFns[fn.name], fn
+			if not existing
 				@classFns[fn.name].push fn
-				
+			else
+				existing.pure = fn.pure
 		else
 			@classFns[fn.name] = [fn]
 			@classFns[fn.name].name = fn.name
@@ -400,11 +402,13 @@ class ClassConverter
 			
 			
 			fn = implBlock.add new CodeBlock.FunctionBlock "#{vfunc.type.org} #{@nativeClassName}::#{vfunc.name}(#{dargs.join ', '})"
+			fn.add "v8::Locker v8locker;"
+			#fn.add "v8::Context::Scope v8ctxScope(bea::Global::context);"
 			fn.add "v8::HandleScope v8scope; v8::Handle<v8::Value> v8retVal;"
 			cif = fn.add new CodeBlock.CodeBlock "if (bea_derived_hasOverride(\"#{vfunc.name}\"))"
 			
 			arglist = _.map vfunc.args, (arg) =>
-				snippets.ToJS(arg.type.org, arg.name, '')
+				snippets.ToJS(@nativeType(arg.type), arg.name, '')
 				
 			if vfunc.args.length > 0
 				cif.add "v8::Handle<v8::Value> v8args[#{vfunc.args.length}] = {#{arglist.join(', ')}};"
@@ -497,25 +501,22 @@ class ClassConverter
 	nativeType: (type) ->
 		#Checks if the type is a 'wrapped' type and returns it as a pointer
 		#otherwise returns the type properly namespaced, but without pointer/ref
-		nativeType = type.fullType()
-		if @typeManager.isWrapped(type) then return nativeType + '*'
-		nativeType
+		
+		if type.cast
+			nativeType = type.cast
+		else
+			nativeType = type.fullType()
 			
+		if @typeManager.isWrapped(type) then return nativeType + '*'
+		
+		nativeType
+		
 	#Create conversion code for a function argument
 	convertArg: (arg, narg) ->
 		nativeType = @nativeType arg.type
-		
-		if arg.type.rawType == 'void' 
-			@warn "Type #{arg.type.fullType()} used as argument type."
-			return ""
 			
 		if not arg.value
-			if 0 && arg.type.isPointer && !@typeManager.isWrapped arg.type && arg.type.isConst
-				ret = snippets.FromJSPointer nativeType, arg.name, "args[#{narg}]", narg
-				arg.name = "&v_" + arg.name + "[0]"
-				return ret
-			else
-				return "#{nativeType} #{arg.name} = " + snippets.FromJS nativeType, "args[#{narg}]", narg
+			return "#{nativeType} #{arg.name} = " + snippets.FromJS nativeType, "args[#{narg}]", narg
 		else
 			#value can be:
 			#someArg = integer
@@ -529,6 +530,7 @@ class ClassConverter
 					argv = argType.namespace + '::' + argv
 				if argType.wrapped and not arg.type.isPointer
 					argv = '&' + argv
+
 			return "#{nativeType} #{arg.name} = " + snippets.Optional nativeType, narg, argv
 		
 	#Generates the if clause for a type check used to determine which overload to call

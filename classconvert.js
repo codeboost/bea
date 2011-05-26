@@ -166,7 +166,7 @@
       return ret;
     };
     ClassConverter.prototype.processFunNode = function(node) {
-      var accType, callNode, fn, fspace, isManual, nodeText, str, _accName;
+      var accType, callNode, existing, fn, fspace, isManual, nodeText, str, _accName;
       if (/^\/\//.test(node.text)) {
         return false;
       }
@@ -254,8 +254,11 @@
         fn.sublines = _.without(fn.sublines, callNode);
       }
       if (this.classFns[fn.name]) {
-        if (!beautils.hasOverload(this.classFns[fn.name], fn)) {
+        existing = beautils.findOverload(this.classFns[fn.name], fn);
+        if (!existing) {
           this.classFns[fn.name].push(fn);
+        } else {
+          existing.pure = fn.pure;
         }
       } else {
         this.classFns[fn.name] = [fn];
@@ -382,10 +385,11 @@
         vfuncdecla = "" + vfunc.type.org + " " + vfunc.name + "(" + (dargs.join(', ')) + ")";
         publicd.add(vfuncdecla + ';');
         fn = implBlock.add(new CodeBlock.FunctionBlock("" + vfunc.type.org + " " + this.nativeClassName + "::" + vfunc.name + "(" + (dargs.join(', ')) + ")"));
+        fn.add("v8::Locker v8locker;");
         fn.add("v8::HandleScope v8scope; v8::Handle<v8::Value> v8retVal;");
         cif = fn.add(new CodeBlock.CodeBlock("if (bea_derived_hasOverride(\"" + vfunc.name + "\"))"));
         arglist = _.map(vfunc.args, __bind(function(arg) {
-          return snippets.ToJS(arg.type.org, arg.name, '');
+          return snippets.ToJS(this.nativeType(arg.type), arg.name, '');
         }, this));
         if (vfunc.args.length > 0) {
           cif.add("v8::Handle<v8::Value> v8args[" + vfunc.args.length + "] = {" + (arglist.join(', ')) + "};");
@@ -472,27 +476,21 @@
     };
     ClassConverter.prototype.nativeType = function(type) {
       var nativeType;
-      nativeType = type.fullType();
+      if (type.cast) {
+        nativeType = type.cast;
+      } else {
+        nativeType = type.fullType();
+      }
       if (this.typeManager.isWrapped(type)) {
         return nativeType + '*';
       }
       return nativeType;
     };
     ClassConverter.prototype.convertArg = function(arg, narg) {
-      var argType, argv, nativeType, ret;
+      var argType, argv, nativeType;
       nativeType = this.nativeType(arg.type);
-      if (arg.type.rawType === 'void') {
-        this.warn("Type " + (arg.type.fullType()) + " used as argument type.");
-        return "";
-      }
       if (!arg.value) {
-        if (0 && arg.type.isPointer && !this.typeManager.isWrapped(arg.type && arg.type.isConst)) {
-          ret = snippets.FromJSPointer(nativeType, arg.name, "args[" + narg + "]", narg);
-          arg.name = "&v_" + arg.name + "[0]";
-          return ret;
-        } else {
-          return ("" + nativeType + " " + arg.name + " = ") + snippets.FromJS(nativeType, "args[" + narg + "]", narg);
-        }
+        return ("" + nativeType + " " + arg.name + " = ") + snippets.FromJS(nativeType, "args[" + narg + "]", narg);
       } else {
         argv = arg.value;
         argType = this.typeManager.typeFromValue(argv);

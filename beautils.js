@@ -1,5 +1,5 @@
 (function() {
-  var Argument, Type, hasOverload, isNativeType, isSameOverload, parseArg, parseClassDirective, parseDeclaration, tabify, trim, _;
+  var Argument, Type, expandCast, findOverload, fixt, isNativeType, isSameOverload, parseArg, parseClassDirective, parseDeclaration, tabify, trim, _;
   _ = require('./lib/underscore');
   trim = function(str) {
     return str.replace(/^\s+|\s+$/g, '');
@@ -54,9 +54,39 @@
       return nt === type;
     });
   };
+  fixt = function(type) {
+    if (/>$/.test(type)) {
+      return type + ' ';
+    }
+    return type;
+  };
+  expandCast = function(cast, type) {
+    if (cast) {
+      if (cast === 'vector') {
+        cast = 'bea::vector<>';
+      }
+      if (cast === 'string') {
+        cast = 'bea::string';
+      }
+      if (cast === 'external') {
+        cast = 'bea::external<>';
+      }
+    } else {
+      if (type.isConst && type.rawType === 'char' && type.isPointer) {
+        cast = 'bea::string';
+      } else if (type.isPointer && isNativeType(type.rawType)) {
+        cast = 'bea::external<>';
+      }
+    }
+    if (cast && cast.indexOf('<>') !== -1) {
+      cast = cast.replace(/<|>/g, '');
+      cast = "" + cast + "<" + (fixt(type.rawType)) + ">";
+    }
+    return cast;
+  };
   Type = (function() {
     function Type(org, namespace) {
-      var ln, type;
+      var ln, type, _ref;
       this.org = org;
       this.namespace = namespace;
       type = this.org.replace(/^\s*const\s+|\s*volatile\s+/, '');
@@ -65,6 +95,7 @@
         this.namespace = type.substring(0, ln);
         type = type.substring(ln + 2);
       }
+      _ref = type.split(':@'), type = _ref[0], this.cast = _ref[1];
       this.type = type;
       this.rawType = type.replace(/^\s+|\s+$/g, '').replace(/\s*\&$/, '').replace(/\s*\*$/, '');
       this.isPointer = type.match(/\*\s*$/) != null;
@@ -73,6 +104,7 @@
       if (this.org.match(/^\s*const\s+/)) {
         this.isConst = true;
       }
+      this.cast = expandCast(this.cast, this);
     }
     Type.prototype.fullType = function() {
       if (isNativeType(this.rawType)) {
@@ -90,13 +122,17 @@
   })();
   Argument = (function() {
     function Argument(org, ns) {
-      var parsed;
+      var cast, parsed, _ref;
       this.org = org;
       this.ns = ns;
       parsed = parseArg(this.org);
-      this.name = parsed.name;
+      this.cast = '';
+      _ref = parsed.name.split(':@'), this.name = _ref[0], cast = _ref[1];
       this.type = new Type(parsed.type, this.ns);
       this.value = parsed.value;
+      if (cast) {
+        this.type.cast = expandCast(cast, this.type);
+      }
     }
     return Argument;
   })();
@@ -148,7 +184,11 @@
       ret.push(cur);
       return ret;
     };
-    args = parseArgs(args);
+    if (args !== 'void') {
+      args = parseArgs(args);
+    } else {
+      args = [];
+    }
     fnArgs = [];
     for (_i = 0, _len = args.length; _i < _len; _i++) {
       arg = args[_i];
@@ -173,10 +213,12 @@
     });
   };
   isSameOverload = function(overload1, overload2) {
-    return overload1.name === overload2.name && _.isEqual(overload1.args, overload2.args);
+    return overload1.name === overload2.name && overload1.args.length === overload2.args.length && _.all(overload1.args, function(a1, i) {
+      return a1.type.type === overload2.args[i].type.type;
+    });
   };
-  hasOverload = function(list, overload) {
-    return _.any(list, function(over) {
+  findOverload = function(list, overload) {
+    return _.detect(list, function(over) {
       return isSameOverload(over, overload);
     });
   };
@@ -206,7 +248,7 @@
     trim: trim,
     parseDeclaration: parseDeclaration,
     isSameOverload: isSameOverload,
-    hasOverload: hasOverload,
+    findOverload: findOverload,
     Type: Type,
     Argument: Argument,
     isNativeType: isNativeType,

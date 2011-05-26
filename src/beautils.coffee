@@ -18,6 +18,7 @@ tabify = (str, ntabs) ->
 #value - default value or undefined
 parseArg = (arg) ->
 ## char*, const char*, const char *, const char* value, const char * value = NULL
+##the argument name can also contain 'type aliasing', eg. const int* numbers:@vector
 	ret = {}
 	arg = trim arg 
 
@@ -65,7 +66,39 @@ isNativeType = (type) ->
 	nativeTypes = ['void', 'int', 'long', 'bool', 'char', 'double', 'short', 'float', 'size_t']
 	type = type.replace /^\s*unsigned\s+|\s*signed\s+/, ''
 	_.any nativeTypes, (nt) -> nt == type
+
+#fix template type, add a space if type ends in >
+fixt = (type) ->
+	if />$/.test type then return type + ' ' 
+	return type
 	
+#adjust the cast string
+#make cast for const char* -> bea::string
+#make cast for const nativeType* -> bea::vector<nativeType>
+
+#cast syntax:
+#int:@vector | int:@string | int:@external | int:@external[indexSizeCode]
+#type:@mytype | type:@mytype<> -> @mytype<type>
+#type:@mytype<>[max] -> @mype<type> made indexable with maxCode length 
+expandCast = (cast, type) ->
+
+	if cast 
+		cast = 'bea::vector<>' if cast == 'vector'  
+		cast = 'bea::string' if cast == 'string'
+		cast = 'bea::external<>' if cast == 'external'
+	else
+		if type.isConst && type.rawType == 'char' && type.isPointer
+			cast = 'bea::string' 
+		else if type.isPointer && isNativeType(type.rawType)
+			cast = 'bea::external<>' 
+		
+	if cast && cast.indexOf('<>') != -1
+		cast = cast.replace /<|>/g, ''
+		cast = "#{cast}<#{fixt type.rawType}>"
+		
+	return cast
+	
+#myType:castType
 class Type
 	constructor: (@org, @namespace) ->
 		type = @org.replace /^\s*const\s+|\s*volatile\s+/, ''
@@ -75,6 +108,7 @@ class Type
 			@namespace = type.substring 0, ln
 			type = type.substring ln + 2
 		
+		[type, @cast] = type.split ':@'
 		#nsType = type without namespace, but with pointer/ref
 		@type = type
 		@rawType = type.replace(/^\s+|\s+$/g, '').replace(/\s*\&$/, '').replace(/\s*\*$/, '') #the type without namespaces and decoration
@@ -82,6 +116,9 @@ class Type
 		@isRef = type.match(/\&\s*$/)?
 		@isConst = false
 		if @org.match(/^\s*const\s+/) then @isConst = true
+		
+		@cast = expandCast(@cast, this)
+		
 	fullType: ->
 		if isNativeType(@rawType) then return @org
 		if @namespace then return @namespace + '::' + @rawType
@@ -91,10 +128,15 @@ class Type
 class Argument
 	constructor: (@org, @ns) ->
 		parsed = parseArg @org
-		@name = parsed.name
+		
+		@cast = ''
+		#argument cast:
+		#int* numbers:@vector -> cast argument as vector<int>
+		#unsigned char* buffer:@external -> argument is an external buffer
+		[@name, cast] = parsed.name.split(':@')
 		@type = new Type parsed.type, @ns
 		@value = parsed.value
-	
+		if cast then @type.cast = expandCast cast, @type
 
 parseDeclaration = (str, namespace) ->
 
@@ -141,7 +183,11 @@ parseDeclaration = (str, namespace) ->
 		
 		return ret
 		
-	args = parseArgs args 
+	#can be declared as void fn(void)
+	if args != 'void'
+		args = parseArgs args 
+	else
+		args = []
 	
 	fnArgs = [];
 	
@@ -161,11 +207,18 @@ parseDeclaration = (str, namespace) ->
 	_.extend fnDec, {args: fnArgs, virtual: isVirtual, pure: isPure, static: isStatic}		
 
 isSameOverload = (overload1, overload2) ->
+	#name should be equal
+	#same number of arguments
+	#same type of arguments
+	#_.isEqual overload1.args, overload2.args
 	overload1.name == overload2.name &&
-	_.isEqual overload1.args, overload2.args
-	
-hasOverload = (list, overload) ->
-	_.any list, (over) ->
+	overload1.args.length == overload2.args.length && 
+	_.all overload1.args, (a1, i) -> 
+		a1.type.type == overload2.args[i].type.type
+
+		
+findOverload = (list, overload) ->
+	_.detect list, (over) ->
 		isSameOverload over, overload	
 	
 parseClassDirective = (node) ->
@@ -193,7 +246,7 @@ exports.u =
 	trim: trim
 	parseDeclaration: parseDeclaration
 	isSameOverload: isSameOverload
-	hasOverload: hasOverload
+	findOverload: findOverload
 	Type: Type
 	Argument: Argument
 	isNativeType: isNativeType
