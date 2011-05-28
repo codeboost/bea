@@ -1,4 +1,5 @@
 Running bea
+===========
 
 	bea fileName.bea [-o outputDir -m -f]
 	-o = the output directory
@@ -7,14 +8,15 @@ Running bea
 	
 
 Bea file syntax
+===============
 
-	A bea file is a mixture of special directives (starting with @), C++ declarations and snippets of C++ code.
+A bea file is a mixture of special directives (starting with @), C++ declarations and snippets of C++ code.
 
-	Bea has been written in CoffeeScript and quite frankly, it has been one the most pleasurable programming experiences in my life. 
-	The syntax of the bea file tries to borrow from the cleanliness of CoffeeScript (which borrows from Python/Ruby) - braces, semi-columns, etc are optional
+Bea has been written in CoffeeScript and quite frankly, it has been one the most pleasurable programming experiences in my life. 
+The syntax of the bea file tries to borrow from the cleanliness of CoffeeScript (which borrows from Python/Ruby) - braces, semi-columns, etc are optional
 
-	The bea parser builds a tree of nodes from the file, based on line indentation.
-	Each line is a node in the tree, lines below it, which are more indented, are it's children:
+The bea parser builds a tree of nodes from the file, based on line indentation.
+Each line is a node in the tree, lines below it, which are more indented, are it's children:
 	
 	//Javascript: Bea file structure
 		Line
@@ -23,14 +25,14 @@ Bea file syntax
 		AnotherLine
 			AnotherLine child
 		
-	Comments start with #. C++ style comments (//) can only be used in C++ code/class declaration. C-style (/* ... */) comments are not supported.
-	Lines which must start with '#' (usually inserted C++ preprocessor definitions) can be escaped:
+Comments start with #. C++ style comments (//) can only be used in C++ code/class declaration. C-style (/* ... */) comments are not supported.
+Lines which must start with '#' (usually inserted C++ preprocessor definitions) can be escaped:
 
 		#This is a comment, but next line is not
 		\#include <header.h>
 	
 
-	Bea directives start with the '@' character:
+Bea directives start with the '@' character:
 		//bea
 		@include "constants.bea"
 		@namespace myproject
@@ -38,12 +40,14 @@ Bea file syntax
 	
 	
 Directives
+==========
 
-	The following directives can only appear within the root indent of the file.
+The following directives can only appear within the root indent of the file.
 		
-	@header
+@header
+=======
 
-	Child lines of the @header directive will be inserted at the top of the generated header file. Usually some #include statements.
+Child lines of the @header directive will be inserted at the top of the generated header file. Usually some #include statements.
 		#Bea
 		@header
 		\#include <v8.h>
@@ -52,9 +56,11 @@ Directives
 		#include <v8.h>
 		
 
-	@cpp
+@cpp
+====
 
-	Child lines of the @cpp directive will be inserted at the top of the generated cpp file. Usually, some #include statements:
+Child lines of the @cpp directive will be inserted at the top of the generated cpp file. Usually, some #include statements:
+
 		@cpp
 			\#include "myfile.h"
 			\#define MYCONDITION(x);
@@ -65,9 +71,10 @@ Directives
 		#define MYCONDITION(x);
 		using namespace myproject;
 			
-	@const
+@const
+======
 		
-	All child lines are the constants which are exposed to the javascript. 
+All child lines are the constants which are exposed to the javascript. 
 		#Bea
 		@const 
 			EACCESS
@@ -84,42 +91,43 @@ Directives
 		}
 			
 			
-	Note that only the names of the constants must be entered. It is assumed that during compilation, the C++ compiler knows the values of the constants. 
-	Tip: You can add a 'using namespace' statement in the @cpp section if your constants/enums are defined in some other namespace. 
+Note that only the names of the constants must be entered. It is assumed that during compilation, the C++ compiler knows the values of the constants. 
+Tip: You can add a 'using namespace' statement in the @cpp section if your constants/enums are defined in some other namespace. 
 
-	@targetNamespace namespaceName
+@targetNamespace namespaceName
 
-	The namespace where the generated exposable code will be placed. Quotes are optional. 
+The namespace where the generated exposable code will be placed. Quotes are optional. 
 
-	@include "filename.bea"
+@include "filename.bea"
 
-	Include another bea file. This is done recursively. Note that some directives should only appear once (like @targetNamespace) so make sure that the included files don't override
-	previously defined directives. I see including the file as pasting it in the main bea file in place of the @include line (or rather, replacing the '@include' node with the children of the
-	root node of the included file).
+Include another bea file. This is done recursively. Note that some directives should only appear once (like @targetNamespace) so make sure that the included files don't override
+previously defined directives. I see including the file as pasting it in the main bea file in place of the @include line (or rather, replacing the '@include' node with the children of the
+root node of the included file).
 
-	@namespace native_namespace
-	Context: Root
+@namespace native_namespace
+Context: Root
 
-	This is the C++ namespace of the object(s) you want to expose. If no namespace name is entered, it is assumed that the classes/functions defined below are globally accessible.
-	The children of the @namespace are the objects and types which you want to expose to the Javascript.
-	If the custom types used in function declarations don't have an implicit namespace, these types are assumed to be part of the parent @namespace.
-		#bea
-		@namespace cv	
-			#expose cv::Mat
-			@class Mat	
-				Mat(Size sz, int type) #__constructor(cv::Size sz, int type)
-			@static Global
-				#bool clipLine(cv::Size imgSize, cv::Point pt1, cv::Point& pt2)
-				bool clipLine(Size imgSize, Point& pt1, Point& pt2)	
-				#void namedWindow(const std::string& winname, int flags)
-				void namedWindow(const std::string& winname, int flags)
+This is the C++ namespace of the object(s) you want to expose. If no namespace name is entered, it is assumed that the classes/functions defined below are globally accessible.
+The children of the @namespace are the objects and types which you want to expose to the Javascript.
+If the custom types used in function declarations don't have an implicit namespace, these types are assumed to be part of the parent @namespace.
+
+	#bea
+	@namespace cv	
+		#expose cv::Mat
+		@class Mat	
+			Mat(Size sz, int type) #__constructor(cv::Size sz, int type)
+		@static Global
+			#bool clipLine(cv::Size imgSize, cv::Point pt1, cv::Point& pt2)
+			bool clipLine(Size imgSize, Point& pt1, Point& pt2)	
+			#void namedWindow(const std::string& winname, int flags)
+			void namedWindow(const std::string& winname, int flags)
 				
 
 
-	@class className exposedName : public Base1, public Base2
-	Context: @namespace
+@class className exposedName : public Base1, public Base2
+Context: @namespace
+Sample:
 
-	Sample:
 		//bea
 		@namespace ns
 			@class MyClass
@@ -139,13 +147,13 @@ Directives
 		
 		res = obj.myMethod({x: 0, y: 0});	//assume we a conversion for ns::Point to/from JS is defined
 
-	Exposes a class to the javascript. The exposed class can be instantiated with javascript's new operator (eg. obj = new className)
-	className must be a valid C++ class declared in the C++ namespace which is defined by the parent @namespace directive.
-	exposedName is the name of the exposed object in Javascript. If exposedName is ommited, className will be used.
+Exposes a class to the javascript. The exposed class can be instantiated with javascript's new operator (eg. obj = new className)
+className must be a valid C++ class declared in the C++ namespace which is defined by the parent @namespace directive.
+exposedName is the name of the exposed object in Javascript. If exposedName is ommited, className will be used.
 
-	@class children are the exposed functions. The function declarations are mostly identical to the way they are declared in the C++ class
-	(without the private, protected or public modifiers).
-	You can add multiple overloads of the same function or multiple constructor overloads.
+@class children are the exposed functions. The function declarations are mostly identical to the way they are declared in the C++ class
+(without the private, protected or public modifiers).
+You can add multiple overloads of the same function or multiple constructor overloads.
 	
 	Inheritance
 	As in C++, you can declare the base classes of a class. Note that these must also be defined in the .bea file, *before* the compiler sees the current class.
