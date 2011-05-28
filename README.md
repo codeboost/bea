@@ -43,7 +43,7 @@ Directives
 ==========
 
 The following directives can only appear within the root indent of the file.
-		
+
 @header
 =======
 
@@ -81,6 +81,7 @@ All child lines are the constants which are exposed to the javascript.
 			DBL_MAX
 			BUFFER_SIZE
 		
+		```C++
 		//C++: Generated C++
 		namespace jmyproject{
 			void ExposeConstants(v8::Handle<v8::Object> target) {
@@ -89,6 +90,7 @@ All child lines are the constants which are exposed to the javascript.
 				BEA_DEFINE_CONSTANT(target, BUFFER_SIZE);	
 			}
 		}
+		```
 			
 			
 Note that only the names of the constants must be entered. It is assumed that during compilation, the C++ compiler knows the values of the constants. 
