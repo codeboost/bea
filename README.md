@@ -75,13 +75,13 @@ Child lines of the @cpp directive will be inserted at the top of the generated c
 ======
 		
 All child lines are the constants which are exposed to the javascript. 
+
 		#Bea
 		@const 
 			EACCESS
 			DBL_MAX
 			BUFFER_SIZE
 
-		```C++
 		//C++: Generated C++
 		namespace jmyproject{
 			void ExposeConstants(v8::Handle<v8::Object> target) {
@@ -90,23 +90,25 @@ All child lines are the constants which are exposed to the javascript.
 				BEA_DEFINE_CONSTANT(target, BUFFER_SIZE);	
 			}
 		}
-		```
 			
 			
 Note that only the names of the constants must be entered. It is assumed that during compilation, the C++ compiler knows the values of the constants. 
 Tip: You can add a 'using namespace' statement in the @cpp section if your constants/enums are defined in some other namespace. 
 
 @targetNamespace namespaceName
+==============================
 
 The namespace where the generated exposable code will be placed. Quotes are optional. 
 
 @include "filename.bea"
+=======================
 
 Include another bea file. This is done recursively. Note that some directives should only appear once (like @targetNamespace) so make sure that the included files don't override
 previously defined directives. I see including the file as pasting it in the main bea file in place of the @include line (or rather, replacing the '@include' node with the children of the
 root node of the included file).
 
 @namespace native_namespace
+===========================
 Context: Root
 
 This is the C++ namespace of the object(s) you want to expose. If no namespace name is entered, it is assumed that the classes/functions defined below are globally accessible.
@@ -127,9 +129,9 @@ If the custom types used in function declarations don't have an implicit namespa
 
 
 @class className exposedName : public Base1, public Base2
+=========================================================
 Context: @namespace
 Sample:
-
 		//bea
 		@namespace ns
 			@class MyClass
@@ -157,16 +159,14 @@ exposedName is the name of the exposed object in Javascript. If exposedName is o
 (without the private, protected or public modifiers).
 You can add multiple overloads of the same function or multiple constructor overloads.
 	
-	Inheritance
-	As in C++, you can declare the base classes of a class. Note that these must also be defined in the .bea file, *before* the compiler sees the current class.
-	The way inheritance works is described in the chapter Inheritance.
-	
-	
+Inheritance
+===========
 
-
-	
+As in C++, you can declare the base classes of a class. Note that these must also be defined in the .bea file, *before* the compiler sees the current class.
+The way inheritance works is described in the chapter Inheritance.
 
 Exposed class methods
+=====================
 
 Exposed methods are declared as children of the @class or @static directives.
 A method is declared just like the declaration in C++:
@@ -198,9 +198,8 @@ The way the native method is invoked can also be customized, using the @call dir
 
 		
 @type
+=====
 Context: @namespace
-
-
 
 Type conversion
 
@@ -230,6 +229,7 @@ often lead to disastrous results. Last thing we want is the script (easily) cras
 Bea solves this problem by strictly checking the type of the supplied arguments and throwing an exception back to the javascript when the type supplied
 is not the one expected by the native function. Also, an exception is thrown if the number of arguments is invalid.
 In our case, the following things will happen:
+
 	//Javascript
 	someObject = new SomeObject();
 	someObject.process(1);	//throws "Invalid number of arguments"
@@ -238,6 +238,7 @@ In our case, the following things will happen:
 	
 Isn't this cool ? Now the C++ code is guarded from undefined, misplaced arguments and strings passed as integers (things which the C++ compiler would complain about).
 Apart from checking weather the argument values are within the allowed range, one doesn't have to worry about type validity.
+
 	//Javascript
 	SomeObject.process(1, "String", [], {width: "string", height: 1});//throws: Argument 4 - Integer expected
 
@@ -249,6 +250,7 @@ Defining types
 	
 BeaGen makes it possible to define conversions for custom types.
 In C++, conversions are done by specializing the bea::Convert structures with the native type.
+
 	//C++
 	template <class T>
 	struct Convert{
@@ -279,7 +281,8 @@ castfrom - generate conversion by casting from CastType to TypeName. For instanc
 	
 		type size_t castfrom int
 
-	Tells the compiler to generate conversion functions which cast from int to size_t:
+Tells the compiler to generate conversion functions which cast from int to size_t:
+
 		struct Convert<size_t>{
 			static size_t FromJS(v8::Handle<v8::Value> v, int nArg) {
 				return (size_t)bea::Convert<int>::FromJS(v, nArg);
@@ -287,35 +290,43 @@ castfrom - generate conversion by casting from CastType to TypeName. For instanc
 			//...
 		}
 
-	Note that the type (after resolving typedef's) must be different but cast-able from the castfrom type, otherwise the C++ compiler will be unable to specialize it:
+Note that the type (after resolving typedef's) must be different but cast-able from the castfrom type, otherwise the C++ compiler will be unable to specialize it:
+
 		//C++
 		typedef int int32;
 		
 		//Bea
 		type int32 castfrom int
 
-	In the C++ code, int32 will resolve to 'int' and the generated bea::Convert<int32> specialization will fail to compile, because it basically means bea::Convert<int>.
-	typedef'd types must be entered simply as 
+In the C++ code, int32 will resolve to 'int' and the generated bea::Convert<int32> specialization will fail to compile, because it basically means bea::Convert<int>.
+typedef'd types must be entered simply as 
+
 		type int32
-	which tells the bea compiler that no conversion is necessary for int32 and that Convert<int32> will compile.
+		
+which tells the bea compiler that no conversion is necessary for int32 and that Convert<int32> will compile.
 	
 castfrom @manual
+================
+
 	@manual directive means "generate conversions, but don't implement them", eg:
 		type MyType castfrom @manual
 	
 Type members
-	If the type has members, then it is assumed that they will be passed 'Object' from Javascript. 
-	Members are defined similar to C++ types:
+============
+
+If the type has members, then it is assumed that they will be passed 'Object' from Javascript. 
+Members are defined similar to C++ types:
+
 		Type membername
 	
-	It is assumed that Type.member is a valid C++ accessor and Bea will generate the code to convert all members to their respective acccessors in the Type variable:
+It is assumed that Type.member is a valid C++ accessor and Bea will generate the code to convert all members to their respective acccessors in the Type variable:
 	
 		namespace cv
 			type Point
 				int x
 				int y
 				
-	Will generate the following C++ code:
+Will generate the following C++ code:
 	
 		template<> struct Convert<cv::Point> {
 			static bool Is(v8::Handle<v8::Value> v) {
@@ -340,26 +351,31 @@ Type members
 			}
 		
 		};
-	This can be called from Javascript:
+		
+This can be called from Javascript:
+
 		//Javascript
 		MyClass.processPoint({x: 100, y: 50}); 
 	
 	
 
 @postAllocator
+==============
+
 	<C++ code>
 	
-	This directive lets you enter C++ code which will execute after your object has been allocated and wrapped into the javascript prototype object.
-	This is guranteed to be the first method called after __constructor and before returning the new object to Javascript.
-	It will generate 'v8::Handle<v8::Value> __postAllocator(const v8::Arguments& args)'. 
-	Refer to your object's 'this' through the generator-inserted '_this' variable in the @postAllocator code.
-	You will also use @postAllocator to make your object indexable (eg. accessible like object[index] from Javascript). Use
+This directive lets you enter C++ code which will execute after your object has been allocated and wrapped into the javascript prototype object.
+This is guranteed to be the first method called after __constructor and before returning the new object to Javascript.
+It will generate 'v8::Handle<v8::Value> __postAllocator(const v8::Arguments& args)'. 
+Refer to your object's 'this' through the generator-inserted '_this' variable in the @postAllocator code.
+You will also use @postAllocator to make your object indexable (eg. accessible like object[index] from Javascript). Use
 	
 		args.This()->SetIndexedPropertiesToExternalArrayData(_this->yourPointer, kExternalUnsignedByteArray, _this->yourPointerSize);
 	
-	Although optional, it is strongly adviced that you define the post allocator for every object and at minimum call the V8::AdjustAmountOfExternalAllocatedMemory() with the 
-	right values.
-	Example:
+Although optional, it is strongly adviced that you define the post allocator for every object and at minimum call the V8::AdjustAmountOfExternalAllocatedMemory() with the 
+right values.
+Example:
+
 		@postAllocator
 				int bytes = _this->dataend - _this->datastart;
 				args.This()->SetIndexedPropertiesToExternalArrayData(_this->datastart, kExternalUnsignedByteArray, bytes);	//Make this object indexable
