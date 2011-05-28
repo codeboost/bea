@@ -80,7 +80,7 @@ All child lines are the constants which are exposed to the javascript.
 			EACCESS
 			DBL_MAX
 			BUFFER_SIZE
-		
+
 		```C++
 		//C++: Generated C++
 		namespace jmyproject{
