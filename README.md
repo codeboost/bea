@@ -18,26 +18,25 @@ The syntax of the bea file tries to borrow from the cleanliness of CoffeeScript 
 The bea parser builds a tree of nodes from the file, based on line indentation.
 Each line is a node in the tree, lines below it, which are more indented, are it's children:
 	
-	//Javascript: Bea file structure
-		Line
-			Child Line
-				Child of Child line
-		AnotherLine
-			AnotherLine child
+	//Bea file structure
+	Line
+		Child Line
+			Child of Child line
+	AnotherLine
+		AnotherLine child
 		
 Comments start with #. C++ style comments (//) can only be used in C++ code/class declaration. C-style (/* ... */) comments are not supported.
 Lines which must start with '#' (usually inserted C++ preprocessor definitions) can be escaped:
 
 		#This is a comment, but next line is not
 		\#include <header.h>
-	
 
 Bea directives start with the '@' character:
+
 		//bea
 		@include "constants.bea"
 		@namespace myproject
 			@class myclass
-	
 	
 Directives
 ==========
@@ -48,6 +47,7 @@ The following directives can only appear within the root indent of the file.
 =======
 
 Child lines of the @header directive will be inserted at the top of the generated header file. Usually some #include statements.
+
 		#Bea
 		@header
 		\#include <v8.h>
@@ -132,6 +132,7 @@ If the custom types used in function declarations don't have an implicit namespa
 =========================================================
 Context: @namespace
 Sample:
+
 		//bea
 		@namespace ns
 			@class MyClass
@@ -182,6 +183,7 @@ For @static, methods are rendered as @namespace::methodName(arguments)
 
 
 If the function requires a different implementation than what Bea is generating, the method declaration can be perceded by the @manual directive.
+
 	@class MyClass
 		@manual int method(MyCustomType* type)
 		
@@ -204,7 +206,7 @@ Context: @namespace
 Type conversion
 
 The main problem with exposing C++ objects to Javascript is the conversion of types between Javascript and native code and vice-versa.
-BeaGen tries to simplify this problem, by providing conversions for most native types as well as a way to generate custom conversions.
+Bea tries to simplify this problem, by providing conversions for most native types as well as a way to generate custom conversions.
 When Javascript makes a call into the native code, the arguments passed to the javascript function must first be converted to native
 types and then passed on to the native function.
 
@@ -247,8 +249,9 @@ This is because members of objects are also cast from Javascript and 'width' wil
 TODO: fix the exception so that it shows the correct invalid member.
 
 Defining types
+==============
 	
-BeaGen makes it possible to define conversions for custom types.
+Bea makes it possible to define conversions for custom types.
 In C++, conversions are done by specializing the bea::Convert structures with the native type.
 
 	//C++
@@ -260,7 +263,7 @@ In C++, conversions are done by specializing the bea::Convert structures with th
 	};
 	
 For example, bea::Convert<int> does conversions from/to type int, bea::Convert<cv::Size> does conversions from cv::Size.
-BeaGen will generate the conversion functions for the types defined in the .bea file.
+Bea will generate the conversion functions for the types defined in the .bea file.
 All conversions must be defined within the 'bea' namespace.
 
 
@@ -274,6 +277,7 @@ The 'type' directive defines a type used by one of the exposed objects. The synt
 TypeName - is the name of the type. If a namespace is not specified for TypeName, the parent namespace is assumed.
 
 If nothing else is defined (castfrom or type members), the compiler assumes that custom conversions are already implemented, eg:
+
 	type std::string
 	
 
@@ -308,7 +312,8 @@ which tells the bea compiler that no conversion is necessary for int32 and that 
 castfrom @manual
 ================
 
-	@manual directive means "generate conversions, but don't implement them", eg:
+@manual directive means "generate conversions, but don't implement them", eg:
+
 		type MyType castfrom @manual
 	
 Type members
