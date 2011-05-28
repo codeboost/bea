@@ -88,7 +88,7 @@ class ClassConverter
 				@warn 'Private and protected members ignored.', child
 			else	
 				@processFunNode child
-
+				
 		#save raw processed class in the global 'environ' thing
 		#we may revisit this class if another class derives from it
 		if !@environ[@namespace]  
@@ -210,21 +210,7 @@ class ClassConverter
 		#If string doesn't look like a function call, but has a space, 
 		#we assume that it is in the form Type name and we generate a r/w accessor for it
 		if str.indexOf("(") == -1 && /\s+/.test str 
-			str = str.replace /\s+/g, ' '
-			fspace = str.indexOf ' '
-			accType = str.slice 0, fspace 
-			_accName = str.slice fspace
-			#declared as int x, y
-			_.each _accName.split(','), (accName) =>
-				accName = beautils.trim(accName)
-				return false unless accName.length
-				accessor = 
-					type: new beautils.Type accType, @namespace
-					name: accName
-					read: "_this->#{accName}"
-					write: "_this->#{accName} = _accValue;"
-				@addAccessor accessor, node
-			return true
+			return @parseAsAccessor str, node
 			
 		if /\s+operator\s*[=\+\/\\\*<>\^\-]*/.test str
 			return @warn 'Operator overloading not supported. Declaration ignored', node
@@ -278,7 +264,43 @@ class ClassConverter
 			@classFns[fn.name].type = fn.type
 			
 		return true
-		
+	
+	#parse a string as accessor declaration
+	#eg. int value1, value2, etc..
+	parseAsAccessor: (str, node) ->
+		str = str.replace /\s+/g, ' '
+		#split by , --> we can have multiple variables declared as
+		#type var1, var2, var3
+		tmp = str.split ','
+		#first element is the argument type/name
+		ar1 = beautils.parseArg tmp[0]
+		accType = ar1.type
+		#the rest of the array are other variables
+		_accName = tmp.slice 1
+		_accName.push ar1.name
+		_.each _accName, (accName) =>
+			accName = beautils.trim(accName)
+			return false unless accName.length
+			
+			type = new beautils.Type accType, @namespace
+			read = "_this->#{accName}"
+			write =  "_this->#{accName} = _accValue;"
+			
+			#cast to/back from pointer if type is wrapped
+			if @typeManager.isWrapped(type) 
+				read = "&" + read
+				write =  "_this->#{accName} = *_accValue;"
+			
+			accessor = 
+				type: type
+				name: accName
+				read: read
+				write: write
+				
+			@addAccessor accessor, node
+		return true
+	
+	#add accessors to the list of accessors
 	addAccessor: (accessor, node) ->
 		if @accessors[accessor.name] then return @warn "Accessor: '#{accessor.name}': accessor already defined. Second definition ignored", node
 		@accessors[accessor.name] = accessor
@@ -589,7 +611,7 @@ class ClassConverter
 		
 		argList = names.join(', ')
 		
-		if overload.type.rawType != 'void'
+		if overload.type.type != 'void'
 			nativeType = @nativeType(overload.type)
 			fnRet = nativeType + ' fnRetVal' 
 			retVal = "return " + snippets.ToJS(nativeType, "fnRetVal")

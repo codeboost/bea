@@ -166,7 +166,7 @@
       return ret;
     };
     ClassConverter.prototype.processFunNode = function(node) {
-      var accType, callNode, existing, fn, fspace, isManual, nodeText, str, _accName;
+      var callNode, existing, fn, isManual, nodeText, str;
       if (/^\/\//.test(node.text)) {
         return false;
       }
@@ -202,25 +202,7 @@
       }
       str = str.replace(/;\s*$/, '');
       if (str.indexOf("(") === -1 && /\s+/.test(str)) {
-        str = str.replace(/\s+/g, ' ');
-        fspace = str.indexOf(' ');
-        accType = str.slice(0, fspace);
-        _accName = str.slice(fspace);
-        _.each(_accName.split(','), __bind(function(accName) {
-          var accessor;
-          accName = beautils.trim(accName);
-          if (!accName.length) {
-            return false;
-          }
-          accessor = {
-            type: new beautils.Type(accType, this.namespace),
-            name: accName,
-            read: "_this->" + accName,
-            write: "_this->" + accName + " = _accValue;"
-          };
-          return this.addAccessor(accessor, node);
-        }, this));
-        return true;
+        return this.parseAsAccessor(str, node);
       }
       if (/\s+operator\s*[=\+\/\\\*<>\^\-]*/.test(str)) {
         return this.warn('Operator overloading not supported. Declaration ignored', node);
@@ -265,6 +247,37 @@
         this.classFns[fn.name].name = fn.name;
         this.classFns[fn.name].type = fn.type;
       }
+      return true;
+    };
+    ClassConverter.prototype.parseAsAccessor = function(str, node) {
+      var accType, ar1, tmp, _accName;
+      str = str.replace(/\s+/g, ' ');
+      tmp = str.split(',');
+      ar1 = beautils.parseArg(tmp[0]);
+      accType = ar1.type;
+      _accName = tmp.slice(1);
+      _accName.push(ar1.name);
+      _.each(_accName, __bind(function(accName) {
+        var accessor, read, type, write;
+        accName = beautils.trim(accName);
+        if (!accName.length) {
+          return false;
+        }
+        type = new beautils.Type(accType, this.namespace);
+        read = "_this->" + accName;
+        write = "_this->" + accName + " = _accValue;";
+        if (this.typeManager.isWrapped(type)) {
+          read = "&" + read;
+          write = "_this->" + accName + " = *_accValue;";
+        }
+        accessor = {
+          type: type,
+          name: accName,
+          read: read,
+          write: write
+        };
+        return this.addAccessor(accessor, node);
+      }, this));
       return true;
     };
     ClassConverter.prototype.addAccessor = function(accessor, node) {
@@ -557,7 +570,7 @@
       fnRet = '';
       retVal = 'return args.This();';
       argList = names.join(', ');
-      if (overload.type.rawType !== 'void') {
+      if (overload.type.type !== 'void') {
         nativeType = this.nativeType(overload.type);
         fnRet = nativeType + ' fnRetVal';
         retVal = "return " + snippets.ToJS(nativeType, "fnRetVal");
