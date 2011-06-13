@@ -402,7 +402,7 @@
         fn.add("v8::HandleScope v8scope; v8::Handle<v8::Value> v8retVal;");
         cif = fn.add(new CodeBlock.CodeBlock("if (bea_derived_hasOverride(\"" + vfunc.name + "\"))"));
         arglist = _.map(vfunc.args, __bind(function(arg) {
-          return snippets.ToJS(this.nativeType(arg.type), arg.name, '');
+          return snippets.ToJS(this.nativeType(arg.type), this.castArgument(arg), '');
         }, this));
         if (vfunc.args.length > 0) {
           cif.add("v8::Handle<v8::Value> v8args[" + vfunc.args.length + "] = {" + (arglist.join(', ')) + "};");
@@ -498,6 +498,17 @@
         return nativeType + '*';
       }
       return nativeType;
+    };
+    ClassConverter.prototype.castVariable = function(type, varName) {
+      if (this.typeManager.isWrapped(type)) {
+        if (!type.isPointer) {
+          return '&' + varName;
+        }
+      }
+      return varName;
+    };
+    ClassConverter.prototype.castArgument = function(arg) {
+      return this.castVariable(arg.type, arg.name);
     };
     ClassConverter.prototype.convertArg = function(arg, narg) {
       var argType, argv, nativeType;

@@ -139,16 +139,20 @@ class Argument
 		if cast then @type.cast = expandCast cast, @type
 
 parseDeclaration = (str, namespace) ->
-
+	
+	#maybe we need to keep in mind that throw() was present
+	#but for now, we just ignore it...
+	#TODO: Figure throw() out
+	
+	str = str.replace /\s+throw\(\)\s*;*/, ''
 
 	argsStart = str.indexOf '('
 	argsEnd = str.lastIndexOf ')'
 	return false if argsStart is -1 or argsEnd is -1
-
-	
 	
 	args = trim str.slice(argsStart + 1, argsEnd)
 	decla = trim(str.slice(0, argsStart))
+	
 	
 	isPure = /\s*=\s*0/.test str
 	

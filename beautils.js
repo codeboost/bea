@@ -138,6 +138,7 @@
   })();
   parseDeclaration = function(str, namespace) {
     var arg, args, argsEnd, argsStart, decla, fnArgs, fnDec, isPure, isStatic, isVirtual, parseArgs, _i, _len;
+    str = str.replace(/\s+throw\(\)\s*;*/, '');
     argsStart = str.indexOf('(');
     argsEnd = str.lastIndexOf(')');
     if (argsStart === -1 || argsEnd === -1) {

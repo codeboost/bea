@@ -252,6 +252,121 @@ This is because members of objects are also cast from Javascript and 'width' wil
 
 TODO: fix the exception so that it shows the correct invalid member.
 
+
+Inheritance
+===========
+
+Bea makes it possible to override C++ virtual functions from Javascript.
+This means that when a native object calls a virtual function on an exposed class, that function can execute in javascript.
+
+Consider the following code:
+
+	//C++ : example
+	//An abstract class with pure virtual function(s)
+	class INotify{
+		public:
+			virtual ~INotify(){} 
+			virtual void onJobFinished(int id, bool err) = 0; //pure virtual function
+	};
+	
+	//An object which takes a pointer to a INotify:
+	class JobExecuter{
+		public:
+		//At some point, the INotify::onJobFinished() will be called 
+		int startJob(INotify* notify);
+	};
+
+In C++, you would implement INotify, by subclassing it and implementing onJobFinished. Then you would use an object instance of the newly implemented 
+class as a parameter to JobExecuter::startJob().
+But in Javascript, you would do this:
+
+	//Javascript
+	//Create an instance of the abstract class
+	var myNotify = new INotify();
+	//Implement the virtual function
+	myNotify.onJobFinished = function(id, err){
+		log ("Job " + id + " finished: " + err);
+	}
+
+	myJobExec = new JobExecuter();
+	
+	//Use the instance as parameter
+	var id = myJobExec.startJob(myNotify);
+
+
+Now, when JobExecuter calls INotify::onJobFinished(), our Javascript function will be called.
+This is possible because of what Bea does behind the scenes.
+
+If a @class contains virtual functions, Bea will generate a hidden derived class, which implement two versions of the virtual function:
+	
+	class D_INotify: public INotify{
+		
+	public:
+		void onJobDone(int id, int err){
+			//Lookup 'onJobDone' in the script context
+			//Convert arguments and call onJobDone() in the script or throw 'pure virtual function call', if function is pure
+			//Return whatever the JS function returns
+		}
+		
+		void d_onJobDone(int id, int err){
+			//Call BaseClass::onJobDone(id, err);
+			//or throw Exception 'pure virtual function call'
+		}		
+	};
+
+The class D_INotify is exposed to the script, instead of INotify. 
+
+onJobDone() is the function which is called by the native (C++) objects. It looks up the function in the javascript instance and calls it if 
+found. If the script does not override the function, the version from the base class is called. If the base class does not implement 
+it (eg. it is a pure virtual function), then an exception is thrown.
+
+d_onJobDone() is the function called by the script. It basically forwards the call to the base class version of the function.
+If the base class does not implement it, an exception is thrown.
+
+
+Multiple inheritance
+====================
+
+Bea allows multiple inheritance to be delcared. The base classes must be declared *before* the derived class.
+
+	@class Base1
+		void baseFunction()
+	
+	@class Base2
+		virtual void base2Function()
+
+	@class MyClass : public Base1, public Base2
+		void myClassFunction()
+		
+	@class MyClass1: public Base1, public Base2
+		@no-override
+		void myClass1Function()
+	
+
+MyClass will 'inherit' the methods from Base1 and Base2. The virtual functions can be overriden by the Javascript.
+MyClass1 will 'inherit' the methods from Base1 and Base2, however the virtual functions can not be overriden from Javascript.
+The @no-override directive tells the Bea compiler to treat all functions (including inherited ones) as non-virtual and will not
+generate hidden subclasses.
+
+
+Inheritance Cost
+================
+
+Just like all good things in life, being able to override C++ virtual functions from Javascript comes at a cost.
+When a native object calls a virtual function on our objects, some additional processing must take place:
+- The V8 engine is locked
+- There is a lookup of the function in the javascript context
+- The arguments are converted from native to JS
+- The JS function is called and it`s return value is converted to native 
+- V8 is unlocked
+
+So a virtual function implemented in javascript may be quite expensive.
+It is a good idea to implement performance-critical objects in C++ and expose them as non-virtual @classes to javascript.
+
+
+
+
+
 Defining types
 ==============
 	
@@ -298,7 +413,7 @@ Tells the compiler to generate conversion functions which cast from int to size_
 			//...
 		}
 
-Note that the type (after resolving typedef's) must be different but cast-able from the castfrom type, otherwise the C++ compiler will be unable to specialize it:
+Note that the type (after resolving typedefs) must be different but cast-able from the castfrom type, otherwise the C++ compiler will be unable to specialize it:
 
 		//C++
 		typedef int int32;
@@ -307,7 +422,7 @@ Note that the type (after resolving typedef's) must be different but cast-able f
 		type int32 castfrom int
 
 In the C++ code, int32 will resolve to 'int' and the generated bea::Convert<int32> specialization will fail to compile, because it basically means bea::Convert<int>.
-typedef'd types must be entered simply as 
+typedef types must be entered simply as 
 
 		type int32
 		
@@ -366,7 +481,8 @@ This can be called from Javascript:
 		//Javascript
 		MyClass.processPoint({x: 100, y: 50}); 
 	
-	
+
+
 
 @postAllocator
 ==============
@@ -376,7 +492,7 @@ This can be called from Javascript:
 This directive lets you enter C++ code which will execute after your object has been allocated and wrapped into the javascript prototype object.
 This is guranteed to be the first method called after __constructor and before returning the new object to Javascript.
 It will generate 'v8::Handle<v8::Value> __postAllocator(const v8::Arguments& args)'. 
-Refer to your object's 'this' through the generator-inserted '_this' variable in the @postAllocator code.
+Refer to your object`s 'this' through the generator-inserted '_this' variable in the @postAllocator code.
 You will also use @postAllocator to make your object indexable (eg. accessible like object[index] from Javascript). Use
 	
 		args.This()->SetIndexedPropertiesToExternalArrayData(_this->yourPointer, kExternalUnsignedByteArray, _this->yourPointerSize);
@@ -389,4 +505,6 @@ Example:
 				int bytes = _this->dataend - _this->datastart;
 				args.This()->SetIndexedPropertiesToExternalArrayData(_this->datastart, kExternalUnsignedByteArray, bytes);	//Make this object indexable
 				V8::AdjustAmountOfExternalAllocatedMemory(sizeof(*_this) + bytes);	//Tell the garbage collector the amount of external memory in use
+	
+	
 	

@@ -104,8 +104,6 @@ class ClassConverter
 			@baseType = @classType
 			@nativeClassName = @options.derivedPrefix + @nativeClassName
 			@classType = new beautils.Type @nativeClassName, targetNamespace
-			#@options.typeMgr.addDerivedClass(@baseType, @nativeType)
-
 			
 		if not @isStatic
 			@options.typeManager.addClassType @classType
@@ -430,7 +428,7 @@ class ClassConverter
 			cif = fn.add new CodeBlock.CodeBlock "if (bea_derived_hasOverride(\"#{vfunc.name}\"))"
 			
 			arglist = _.map vfunc.args, (arg) =>
-				snippets.ToJS(@nativeType(arg.type), arg.name, '')
+				snippets.ToJS(@nativeType(arg.type), @castArgument(arg), '')
 				
 			if vfunc.args.length > 0
 				cif.add "v8::Handle<v8::Value> v8args[#{vfunc.args.length}] = {#{arglist.join(', ')}};"
@@ -532,6 +530,15 @@ class ClassConverter
 		if @typeManager.isWrapped(type) then return nativeType + '*'
 		
 		nativeType
+		
+	#returns the proper cast for an argument name
+	castVariable: (type, varName) ->
+		if @typeManager.isWrapped type
+			if !type.isPointer then return '&' + varName
+		return varName
+		
+	castArgument: (arg) ->
+			return @castVariable arg.type, arg.name
 		
 	#Create conversion code for a function argument
 	convertArg: (arg, narg) ->

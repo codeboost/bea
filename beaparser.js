@@ -94,12 +94,14 @@
         this.curNode.addChild(node);
       } else if (level < this.curNode.level) {
         tmp = this.curNode;
-        while (tmp.level > level) {
+        while (tmp && tmp.level > level) {
           tmp = tmp.parent;
         }
-        tmp.parent.addChild(node);
-      } else {
-        throw "Invalid indent on line " + (linenumber + 1) + ": '" + txt + "'";
+        if (tmp && tmp.parent) {
+          tmp.parent.addChild(node);
+        } else {
+          throw "Invalid indent on line " + (linenumber + 1) + ": '" + txt + "'";
+        }
       }
       return this.curNode = node;
     };
