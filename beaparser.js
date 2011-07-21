@@ -65,7 +65,11 @@
     BeaParser.prototype.parseLine = function(txt, linenumber) {
       var level, node, rawTxt, tmp, _ref;
       level = (_ref = txt.match(/(^\s+)/g)) != null ? _ref[0].length : void 0;
-      level != null ? level : level = 0;
+            if (level != null) {
+        level;
+      } else {
+        level = 0;
+      };
       level++;
       rawTxt = txt.replace(/^\s+|\s+$/g, '');
       if (!rawTxt.length) {

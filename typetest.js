@@ -71,7 +71,7 @@
       'fullType()': 'std::vector<cv::Mat*>'
     });
   });
-  /*
+  /*		
   inspectType "const Mat&"
   inspectType "cv::Mat"
   inspectType "cv::Mat", "cv"
