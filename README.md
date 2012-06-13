@@ -27,17 +27,20 @@ What is supported / Features ?
 * Javascript accessors from member variables
 * Object-notation js types to native C++ types
 
-Running bea
+Installing & Running 
 ===========
-	Install node.js and then Coffee-Script
+Install node.js, then Coffee-Script, then run npm install to get bea dependencies:
 	
-		npm install -g coffee-script
+	npm install -g coffee-script
+	...
+	git clone git@github.com:codeboost/bea.git 
+	cd bea
+	npm install
 	
-	
-	Then, run:
-	
-		coffee bea fileName.bea [-o outputDir -m -f]
-	
+After that, you can run bea, like so:
+
+	coffee bea fileName.bea 
+
 
 	
 Bea file syntax
