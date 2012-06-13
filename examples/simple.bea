@@ -1,6 +1,0 @@
-@project MyProject
-@namespace ns
-    @class SimpleClass
-        SimpleClass(); #semicolon ; at the end is optional
-        int sum(const std::vector<int>* numbers) #references
-        SimpleClass* clone() #Custom type/pointer return values

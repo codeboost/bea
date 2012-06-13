@@ -282,7 +282,7 @@ namespace bea{
 		
 		expose();
 
-		executeScript("./lib/loader.js");
+		executeScript("./loader.js");
 		CloneObject(m_context->Global(), globalSandbox);
 
 

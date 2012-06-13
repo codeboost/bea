@@ -1,0 +1,41 @@
+#mkdir v8
+#copy v8.h to v8
+#copy libv8_base to v8
+#scons
+
+projectFiles = Split("""
+	main.cpp
+	helloJS.cpp
+	../../cpp/beascript.cpp
+""")
+
+includePaths = Split("""
+	v8/include
+	../../cpp
+""")
+
+libPaths = Split("""
+	v8
+""");
+
+if bool(ARGUMENTS.get("debug", 0)):
+	libs = Split("""
+		v8_base
+		v8_snapshot
+		boost_filesystem-mt
+		boost_system-mt
+	""")
+
+else:
+	libs = Split("""
+		v8_base
+		v8_snapshot
+		boost_filesystem-mt
+		boost_system-mt
+	""")
+
+Program('hello', projectFiles, 
+					CPPPATH=includePaths, 
+					LIBS=libs, 
+					LIBPATH=libPaths)
+

@@ -1,0 +1,12 @@
+@project helloJS
+@targetNamespace helloJS
+
+@header
+	\#include <v8.h>
+	\#include "hello.h"
+
+@cpp
+	\#include <bea.h>
+	\#include "helloJS.h"
+
+@include "item.bea"

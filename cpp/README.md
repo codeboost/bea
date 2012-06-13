@@ -7,6 +7,13 @@ Purpose
 	A short description of the API is found in this file.
 
 
+Building
+	You must have the boost libraries installed. Although it bothers me to have this dependency, it is the easiest way to do cross-platform filesystem operations (required by beascript, which loads scripts and resolves includes).
+	On MacOS X, use
+		brew install -v boost 2>&1
+
+	You must build v8.
+
 Convert<T>
 
 	Specialize this with a custom type to define conversions from/to Javascript.
