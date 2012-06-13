@@ -29,11 +29,14 @@ What is supported / Features ?
 
 Running bea
 ===========
+	Install node.js and then Coffee-Script
 	
-	coffee bea fileName.bea [-o outputDir -m -f]
-	-o = the output directory
-	-m = only the blank implementation of @manual methods and types will be written to the file specified in the @project directive
-	-f = force file overwrite. If this parameter is not present and the file already exists, the program will exit
+		npm install -g coffee-script
+	
+	
+	Then, run:
+	
+		coffee bea fileName.bea [-o outputDir -m -f]
 	
 
 	
