@@ -1,4 +1,4 @@
-_ = require './lib/underscore'
+_ = require 'underscore'
 BeaParser = require('./beaparser').BeaParser
 fs = require 'fs'
 debugIt = require('./debugIt').debugIt

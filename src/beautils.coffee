@@ -1,4 +1,4 @@
-_ = require('./lib/underscore')
+_ = require('underscore')
 
 trim = (str) ->
 	str.replace(/^\s+|\s+$/g, '');

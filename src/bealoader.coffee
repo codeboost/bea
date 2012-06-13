@@ -297,8 +297,10 @@ class BeaLoader extends MessageLogger
 		parser = new rp.RecursiveParser
 		
 		root = parser.parseFile fileName
-		
-		return false unless root
+
+		if not root
+			@error 'Could not parse ' + fileName
+			return false
 		
 		_.each root.children, (node, i) =>
 			switch node.type()
@@ -317,7 +319,7 @@ class BeaLoader extends MessageLogger
 			@targetNamespace = 'targetNamespace'
 			
 		if !@projectName 
-			@warn "@project directive not found."
+			@error "@project directive not found."
 			return false
 		
 		return true

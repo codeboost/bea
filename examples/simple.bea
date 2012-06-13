@@ -1,0 +1,7 @@
+@project MyProject
+@namespace ns
+    @class MyClass
+        MyClass(const int number, bool option = false); #semicolon ; at the end is optional
+        MyClass(const std::string& name, int id = 0, const std::vector<int>& numbers) #argument types and default values
+        int sum(const std::vector<int>* numbers) #references
+        MyClass* clone() #Custom type/pointer return values
