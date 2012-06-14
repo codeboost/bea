@@ -10,9 +10,12 @@ Purpose
 Building
 	You must have the boost libraries installed. Although it bothers me to have this dependency, it is the easiest way to do cross-platform filesystem operations (required by beascript, which loads scripts and resolves includes).
 	On MacOS X, use
+		
 		brew install -v boost 2>&1
 
-	You must build v8.
+	You must build v8 and link your app against it. See the examples for a demo project.
+
+
 
 Convert<T>
 
