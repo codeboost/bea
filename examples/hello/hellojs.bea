@@ -9,4 +9,15 @@
 	\#include <bea.h>
 	\#include "helloJS.h"
 
-@include "item.bea"
+@namespace hello
+	@type std::string
+	@class Item
+		@destructor
+			delete _this;
+
+		Item()
+		Item(const char* name)
+		Item(const std::string& name, int age)
+		std::string name()
+		std::string sayHello(const std::string &message)
+		virtual std::string greet()
