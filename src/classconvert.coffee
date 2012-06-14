@@ -367,7 +367,7 @@ class ClassConverter
 		
 		classBlock = new CodeBlock.ClassBlock "class #{@nativeClassName} : public #{@baseType.fullType()}, public bea::DerivedClass"
 		
-		public = classBlock.add (new CodeBlock.CodeBlock "public:", false)
+		publicBlock = classBlock.add (new CodeBlock.CodeBlock "public:", false)
 		
 		#constructor
 		constructors = _.detect @classFns, (fn) -> fn.name == '__constructor'
@@ -381,7 +381,7 @@ class ClassConverter
 			
 			#bea_Derived() : Derived(){}
 			#bea_Derived(int k, CClass* ptr): Derived(k, ptr){}
-			public.add "#{@nativeClassName}(#{dargs.join ', '}) : #{@baseType.fullType()}(#{cargs.join(', ')}){}"
+			publicBlock.add "#{@nativeClassName}(#{dargs.join ', '}) : #{@baseType.fullType()}(#{cargs.join(', ')}){}"
 
 		#add virtual functions
 		vfuncs = []
@@ -394,9 +394,9 @@ class ClassConverter
 		
 		implBlock = new CodeBlock.CodeBlock
 		
-		publicv = public.add new CodeBlock.CodeBlock "", false
+		publicv = publicBlock.add new CodeBlock.CodeBlock "", false
 		publicv.add "//JS: These virtual functions will only be called from Javascript"
-		publicd = public.add new CodeBlock.CodeBlock "", false
+		publicd = publicBlock.add new CodeBlock.CodeBlock "", false
 		publicd.add "//Native: These virtual functions will only be called from native code"
 		
 		_.each vfuncs, (vfunc) =>
