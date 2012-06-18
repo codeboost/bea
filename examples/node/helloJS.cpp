@@ -57,12 +57,6 @@ namespace helloJS {
 			hello::Item* fnRetVal = new helloJS::_D_Item(name);
 			return v8::External::New(fnRetVal);
 		}
-		//Item(const Item& other)
-		if (bea::Convert<hello::Item*>::Is(args[0])) {
-			hello::Item* other = bea::Convert<hello::Item*>::FromJS(args[0], 0);
-			hello::Item* fnRetVal = new helloJS::_D_Item(*other);
-			return v8::External::New(fnRetVal);
-		}
 		//Item()
 		if (args.Length() == 0) {
 			hello::Item* fnRetVal = new helloJS::_D_Item();
@@ -72,31 +66,12 @@ namespace helloJS {
 		METHOD_END();
 	}
 	
-	v8::Handle<v8::Value> JItem::duplicate(const v8::Arguments& args) {
-		METHOD_BEGIN(0);
-		//Item duplicate()
-		helloJS::_D_Item* _this = bea::Convert<helloJS::_D_Item*>::FromJS(args.This(), 0);
-		hello::Item* fnRetVal = new hello::Item(_this->duplicate());
-		return bea::Convert<hello::Item*>::ToJS(fnRetVal);
-		METHOD_END();
-	}
-	
 	v8::Handle<v8::Value> JItem::name(const v8::Arguments& args) {
 		METHOD_BEGIN(0);
 		//std::string name()
 		helloJS::_D_Item* _this = bea::Convert<helloJS::_D_Item*>::FromJS(args.This(), 0);
 		std::string fnRetVal = _this->name();
 		return bea::Convert<std::string>::ToJS(fnRetVal);
-		METHOD_END();
-	}
-	
-	v8::Handle<v8::Value> JItem::setName(const v8::Arguments& args) {
-		METHOD_BEGIN(1);
-		//void setName(const std::string& name)
-		std::string name = bea::Convert<std::string>::FromJS(args[0], 0);
-		helloJS::_D_Item* _this = bea::Convert<helloJS::_D_Item*>::FromJS(args.This(), 0);
-		_this->setName(name);
-		return args.This();
 		METHOD_END();
 	}
 	
@@ -119,14 +94,6 @@ namespace helloJS {
 		METHOD_END();
 	}
 	
-	v8::Handle<v8::Value> JItem::className(const v8::Arguments& args) {
-		METHOD_BEGIN(0);
-		//static std::string className()
-		std::string fnRetVal = _D_Item::className();
-		return bea::Convert<std::string>::ToJS(fnRetVal);
-		METHOD_END();
-	}
-	
 	v8::Handle<v8::Value> JItem::__postAllocator(const v8::Arguments& args) {
 		METHOD_BEGIN(0);
 		//void __postAllocator()
@@ -142,12 +109,9 @@ namespace helloJS {
 		obj->setDestructor(__destructor);
 		//Exposed Methods
 		obj->setConstructor(__constructor);
-		obj->exposeMethod("duplicate", duplicate);
 		obj->exposeMethod("name", name);
-		obj->exposeMethod("setName", setName);
 		obj->exposeMethod("sayHello", sayHello);
 		obj->exposeMethod("greet", greet);
-		obj->exposeMethod("className", className);
 		obj->setPostAllocator(__postAllocator);
 		//Accessors
 		//Expose object to the Javascript
@@ -155,7 +119,7 @@ namespace helloJS {
 	}
 	
 	std::string _D_Item::greet() {
-		v8::Locker v8locker;
+		//v8::Locker v8locker;
 		v8::HandleScope v8scope; v8::Handle<v8::Value> v8retVal;
 		if (bea_derived_hasOverride("greet")) {
 			v8::Handle<v8::Value> v8args[1];

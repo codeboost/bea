@@ -9,12 +9,9 @@ namespace helloJS {
 			static void __destructor(v8::Handle<v8::Value> value);
 			//Exported methods
 			static v8::Handle<v8::Value> __constructor(const v8::Arguments& args);
-			static v8::Handle<v8::Value> duplicate(const v8::Arguments& args);
 			static v8::Handle<v8::Value> name(const v8::Arguments& args);
-			static v8::Handle<v8::Value> setName(const v8::Arguments& args);
 			static v8::Handle<v8::Value> sayHello(const v8::Arguments& args);
 			static v8::Handle<v8::Value> greet(const v8::Arguments& args);
-			static v8::Handle<v8::Value> className(const v8::Arguments& args);
 			static v8::Handle<v8::Value> __postAllocator(const v8::Arguments& args);
 		public:
 			static void _InitJSObject(v8::Handle<v8::Object> target);
@@ -25,7 +22,6 @@ namespace helloJS {
 			_D_Item() : hello::Item(){}
 			_D_Item(const char* name) : hello::Item(name){}
 			_D_Item(const std::string& name,  int age) : hello::Item(name, age){}
-			_D_Item(const Item& other) : hello::Item(other){}
 			//JS: These virtual functions will only be called from Javascript
 			inline std::string _d_greet() {
 				return hello::Item::greet();

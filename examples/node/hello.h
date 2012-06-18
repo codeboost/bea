@@ -23,17 +23,6 @@ namespace hello{
 		Item(const std::string& name, int age): m_name(name), m_age(age){
 		}
 
-		Item(const Item& item){
-			m_name = item.m_name;
-			m_age = item.m_age;
-		}
-
-		Item duplicate(){
-			return Item(*this);
-		}
-
-		static std::string className();
-
 		virtual ~Item(){
 			std::cout << "~Item()";
 		}
@@ -48,6 +37,7 @@ namespace hello{
 
 		std::string sayHello(const std::string &message){
 			//This calls a virtual function which can be overriden from Javascript
+			//return m_name + greet() + message;
 			return m_name + greet() + message;
 		}
 

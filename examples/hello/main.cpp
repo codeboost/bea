@@ -8,6 +8,10 @@ void printLog(const char* msg){
 	std::cout << msg << std::endl;
 }
 
+std::string hello::Item::className(){
+	return "Item";
+}
+
 
 
 class ScriptController : public bea::BeaScript<helloJS::Project>{

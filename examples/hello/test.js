@@ -1,6 +1,11 @@
 _ = require('./underscore'); //Yes, you can do this!
 
 log("In Javascript!");
+
+Item.prototype.clone = function(){
+	return new Item(this);
+}
+
 var item = new Item();
 
 log("item.name() should be (no name): " + item.name());
@@ -35,3 +40,23 @@ item.greet = function(){
 
 msg = item.sayHello("How are you today?");
 log(msg);
+
+item1 = item.duplicate()
+log('Duplicated name: ' + item1.name())
+
+item.setName("item name");
+item1.setName("item1 name1");
+
+log("Original name: " + item.name());
+log("Duplicated: " + item1.name());
+
+
+
+cloned = item.clone();
+cloned.setName("cloned name");
+log("Cloned item name: " + cloned.name());
+log("Original item name: " + item.name());
+
+
+//static function
+log("className = " + item.className());
