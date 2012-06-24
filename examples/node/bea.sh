@@ -1,2 +1,2 @@
-coffee ../../bea hellojs.bea -f
+bea hellojs.bea -f
 node-waf configure build

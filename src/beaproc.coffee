@@ -16,11 +16,13 @@ module.exports.run = ->
 
 	args = require('argsparser').parse()
 
-	if args["coffee"].length < 2  
+	oargs = args["coffee"] or args["node"]
+
+	if oargs.length < 2  
 		console.log "Error: bea file not specified. Nothing to do."
 		process.exit -1
 
-	beaFile = fs.realpathSync args["coffee"][1]
+	beaFile = fs.realpathSync oargs[1]
 
 
 	bea = new bealoader.BeaLoader beaFile

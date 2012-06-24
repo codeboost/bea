@@ -119,7 +119,7 @@ namespace helloJS {
 	}
 	
 	std::string _D_Item::greet() {
-		//v8::Locker v8locker;
+		v8::Locker v8locker;
 		v8::HandleScope v8scope; v8::Handle<v8::Value> v8retVal;
 		if (bea_derived_hasOverride("greet")) {
 			v8::Handle<v8::Value> v8args[1];
