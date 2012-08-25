@@ -554,13 +554,20 @@ class ClassConverter
 			#type manager attempts to see if the value looks like a known (user-defined) type constructor
 			#returns the known type or false
 			argType = @typeManager.typeFromValue argv
+			retBlock = ""
 			if argType 
 				if argv.indexOf("::") == -1
 					argv = argType.namespace + '::' + argv
 				if argType.wrapped and not arg.type.isPointer
-					argv = '&' + argv
+					#This was hacked in with brute force
+					#TODO: check again if this is the right way to do it
+					#cv::Mat* mask = bea::Optional<cv::Mat*>::FromJS(args, 1, &Mat()); --> compiler error: error: taking the address of a temporary object of type 'cv::Mat'
+					#If there are two+ default arguments, this will fail, because _t will be declared twice+. TODO: fix it
+					retBlock = "#{arg.type.rawType} _t = " + argv + ";\n"
+					argv = "&_t";
 
-			return "#{nativeType} #{arg.name} = " + snippets.Optional nativeType, narg, argv
+
+			return retBlock + "#{nativeType} #{arg.name} = " + snippets.Optional nativeType, narg, argv
 		
 	#Generates the if clause for a type check used to determine which overload to call
 	typeif: (args) ->
