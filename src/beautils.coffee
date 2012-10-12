@@ -137,6 +137,9 @@ class Argument
 		@type = new Type parsed.type, @ns
 		@value = parsed.value
 		if cast then @type.cast = expandCast cast, @type
+	#returns full argument declaration, without default argument value (eg. int k = 0)
+	orgNoDefault: ->
+		return @org.replace /\s*\=\s*.+$/, ''
 
 parseDeclaration = (str, namespace) ->
 	

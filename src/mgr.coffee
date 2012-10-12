@@ -40,10 +40,19 @@ class TypeManager
 	#Check if a type is native or is in the list of declared types
 	knownType: (type) -> 
 		type.isNative() || _.any @types, (wt) -> wt.rawType == type.rawType && wt.namespace == type.namespace
+
+	#Check if a type has been declared, ignoring namespaces
+	declaredType: (type) ->
+		type.isNative() || _.any @types, (wt) -> wt.rawType == type.rawType
+
 		
 	#Attempts to see if the value looks like a known (user-defined) type constructor
+	#returns false if it's not a type constructor
+	#returns true type if not
 	typeFromValue: (value) ->
 		thatType = false
+		#eg void fn(Mat& arg = Mat()) --> Mat() is a type constructor
+
 		mret = value.match(/(\w+)\s*\(.*\)/)
 		if mret?.length > 1
 			probableType = mret[1]

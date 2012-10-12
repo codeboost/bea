@@ -3,7 +3,7 @@ _ = require 'underscore'
 fs = require 'fs'
 beautils = require('./beautils').u
 utest = require './utest' 
-debugIt = require('./debugIt').debugIt
+
 
 inspectType = (typeStr, ns) ->
 	console.log 'TypeStr: ' + typeStr + '; ns = ' + ns

@@ -202,6 +202,12 @@ the native call. It can be used to place guards for argument values/ranges in he
 
 The way the native method is invoked can also be customized, using the @call directive.
 
+
+Modifiers:
+@noexpose -> do not expose class to javascript
+@manual -> will declare function, but not generate implementation
+@async -> will generate asynchronous function call
+
 		
 @type
 =====
